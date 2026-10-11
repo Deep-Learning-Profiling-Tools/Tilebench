@@ -1,0 +1,94 @@
+{
+ "verdict": "audit_only",
+ "static": {
+  "verdict": "audit_only",
+  "evidence": [
+   {
+    "level": "audit",
+    "category": "io",
+    "message": "import of 'os' (environment/path access)",
+    "line": 1,
+    "scope": "host",
+    "matched": null
+   }
+  ],
+  "kernel_line_count": 149,
+  "aliases": {
+   "os": "os",
+   "torch": "torch",
+   "nki": "nki",
+   "nl": "nki.language",
+   "nisa": "nki.isa"
+  }
+ },
+ "contract_evidence": [
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "The @ operator on tensors performs the GEMM in PyTorch. [audit only: match spans a line break (the rule is a single-statement pattern)]",
+   "line": 86,
+   "scope": "host",
+   "matched": ")\n\n\n@n"
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "Semaphores, flags or a partials workspace indicate a non-canonical Stream-K fixup or a split-K scheme. [audit only: the term occurs only inside a name the candidate defines or a keyword-argument name (_load_b_block): a name, not a library call]",
+   "line": 38,
+   "scope": "host",
+   "matched": "lock"
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "Semaphores, flags or a partials workspace indicate a non-canonical Stream-K fixup or a split-K scheme. [audit only: the term occurs only inside a name the candidate defines or a keyword-argument name (_compute_block): a name, not a library call]",
+   "line": 44,
+   "scope": "host",
+   "matched": "lock"
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "missing evidence: No atomic-add fixup found; the Stream-K region must combine segments with fp32 atomic adds into the zeroed accumulator. [audit only: a missing pattern is not evidence of a violation]",
+   "line": null,
+   "scope": null,
+   "matched": null
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "missing evidence: No SM-count query found; the Stream-K partition must derive from the device's SM count. [audit only: a missing pattern is not evidence of a violation]",
+   "line": null,
+   "scope": null,
+   "matched": null
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "missing evidence: No TF32 evidence for fp32 operands. [audit only: a missing pattern is not evidence of a violation]",
+   "line": null,
+   "scope": null,
+   "matched": null
+  }
+ ],
+ "review_items": [],
+ "audit_flags": [
+  "line 1 [host]: import of 'os' (environment/path access)",
+  "line 86 [host]: The @ operator on tensors performs the GEMM in PyTorch. [audit only: match spans a line break (the rule is a single-statement pattern)]",
+  "line 38 [host]: Semaphores, flags or a partials workspace indicate a non-canonical Stream-K fixup or a split-K scheme. [audit only: the term occurs only inside a name the candidate defines or a keyword-argument name (_load_b_block): a name, not a library call]",
+  "line 44 [host]: Semaphores, flags or a partials workspace indicate a non-canonical Stream-K fixup or a split-K scheme. [audit only: the term occurs only inside a name the candidate defines or a keyword-argument name (_compute_block): a name, not a library call]",
+  "missing evidence: No atomic-add fixup found; the Stream-K region must combine segments with fp32 atomic adds into the zeroed accumulator. [audit only: a missing pattern is not evidence of a violation]",
+  "missing evidence: No SM-count query found; the Stream-K partition must derive from the device's SM count. [audit only: a missing pattern is not evidence of a violation]",
+  "missing evidence: No TF32 evidence for fp32 operands. [audit only: a missing pattern is not evidence of a violation]"
+ ],
+ "checker_version": "contract_checks/2026-10-07.v4",
+ "diagnostics": [],
+ "candidate_sha256": "b01a3fac69bf2617212ba2f4b4e5a55a17a6563a7140afdd2e5ee4f34b4a1b32",
+ "checker": {
+  "checker_version": "contract_checks/2026-10-07.v4",
+  "checker_sources_sha256": "b797d8c10065d3874853ff5b7b31a08d35da8da76c6a56c1b0d1b574da2a12e9"
+ },
+ "rules_sha256": "649d1a2f303b6ef9b3174debcbc11e37923aa717daea00ee9fac468f2863050a",
+ "checked_at": 1791671001.5735128,
+ "executor": "claude-code (Trn2 NKI Base)"
+}

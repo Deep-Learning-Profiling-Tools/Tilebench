@@ -1,0 +1,447 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "compile_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791664495.2633183,
+   "ok": true,
+   "elapsed_s": 0.003145456314086914
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py\", line 300, in run\n    return _batch_normalization[2](\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('C', 1024), ('N', 1000), ('apply_rows', 2048), ('eps', 1e-05), ('statistics_rows', 4096)):g2|[1000,1024]:Half:S(C)|[1024]:Half:S(C)|[1024]:Half:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel:\nCollected 2 different diagnostics:\n- [x1] warning: the 'is not' operator is not supported in NKI, use '!='\n- [x2] error: assertion failed: dma_transpose hwdge requires src.shape[0] * src.shape[-2] to be a multiple of 16, got src.shape=(1, 1000, 128) (1 * 1000 = 1000)\n\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:2321:9: error: assertion failed: dma_transpose hwdge requires src.shape[0] * src.shape[-2] to be a multiple of 16, got src.shape=(1, 1000, 128) (1 * 1000 = 1000)\n        assert (src.shape[0] * src.shape[-2]) % 16 == 0, (\n        ^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_transpose.py:601:9: note: called from here\n        validate_hwdge_transpose(src, name=\"dma_transpose\")\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:15:5: note: called from here\n    nisa.dma_transpose(\n    ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:84:22: note: called from here\n            loaded = _load_channels_first(x, r0, rows, c0, F, C)\n                     ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:54:1: note: when tracing NKI kernel\ndef _batch_normalization(\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:2321:9: error: assertion failed: dma_transpose hwdge requires src.shape[0] * src.shape[-2] to be a multiple of 16, got src.shape=(1, 1000, 128) (1 * 1000 = 1000)\n        assert (src.shape[0] * src.shape[-2]) % 16 == 0, (\n        ^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_transpose.py:601:9: note: called from here\n        validate_hwdge_transpose(src, name=\"dma_transpose\")\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:15:5: note: called from here\n    nisa.dma_transpose(\n    ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:84:22: note: called from here\n            loaded = _load_channels_first(x, r0, rows, c0, F, C)\n                     ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:54:1: note: when tracing NKI kernel\ndef _batch_normalization(\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py(300): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "10028b3db11ebbd30f67",
+  "round": 4,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "228f82019d53985e",
+   "case_index": 0,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 1000
+   },
+   "problem_size": 1024000,
+   "status": "compile_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py\", line 300, in run\n    return _batch_normalization[2](\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('C', 1024), ('N', 1000), ('apply_rows', 2048), ('eps', 1e-05), ('statistics_rows', 4096)):g2|[1000,1024]:Half:S(C)|[1024]:Half:S(C)|[1024]:Half:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel:\nCollected 2 different diagnostics:\n- [x1] warning: the 'is not' operator is not supported in NKI, use '!='\n- [x2] error: assertion failed: dma_transpose hwdge requires src.shape[0] * src.shape[-2] to be a multiple of 16, got src.shape=(1, 1000, 128) (1 * 1000 = 1000)\n\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:2321:9: error: assertion failed: dma_transpose hwdge requires src.shape[0] * src.shape[-2] to be a multiple of 16, got src.shape=(1, 1000, 128) (1 * 1000 = 1000)\n        assert (src.shape[0] * src.shape[-2]) % 16 == 0, (\n        ^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_transpose.py:601:9: note: called from here\n        validate_hwdge_transpose(src, name=\"dma_transpose\")\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:15:5: note: called from here\n    nisa.dma_transpose(\n    ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:84:22: note: called from here\n            loaded = _load_channels_first(x, r0, rows, c0, F, C)\n                     ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:54:1: note: when tracing NKI kernel\ndef _batch_normalization(\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:2321:9: error: assertion failed: dma_transpose hwdge requires src.shape[0] * src.shape[-2] to be a multiple of 16, got src.shape=(1, 1000, 128) (1 * 1000 = 1000)\n        assert (src.shape[0] * src.shape[-2]) % 16 == 0, (\n        ^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_transpose.py:601:9: note: called from here\n        validate_hwdge_transpose(src, name=\"dma_transpose\")\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:15:5: note: called from here\n    nisa.dma_transpose(\n    ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:84:22: note: called from here\n            loaded = _load_channels_first(x, r0, rows, c0, F, C)\n                     ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py:54:1: note: when tracing NKI kernel\ndef _batch_normalization(\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m/impl_nki.py(300): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791664495.2670927,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.9315204620361328,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "3ba50b04cc30d8f4",
+   "case_index": 3,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 2000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "9beebcaa56e0512c",
+   "case_index": 6,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 3000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "b20ec0bf90000a3e",
+   "case_index": 9,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 4000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "69bf52a911172664",
+   "case_index": 12,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 5000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "ca77b1d9619cae0d",
+   "case_index": 15,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 6000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "26916432d28a6620",
+   "case_index": 18,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 7000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "a02a440fbd50a105",
+   "case_index": 21,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 8000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "6400eaa1e0b832c8",
+   "case_index": 24,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 9000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "11029b4c802fb5b9",
+   "case_index": 27,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 10000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "06d0e0f7380228c2",
+   "case_index": 30,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 11000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "e07c993ea276e7cb",
+   "case_index": 33,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 12000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "6d9244cbdf8435ca",
+   "case_index": 36,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 13000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "3bdc49b781bf1f99",
+   "case_index": 39,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 14000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "b37302868a765458",
+   "case_index": 42,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 15000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "449e8fe224ea2138",
+   "case_index": 45,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 16000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "f1ac570e240af6f7",
+   "case_index": 48,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 17000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "5a837592958e4e75",
+   "case_index": 51,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 18000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "6ab370c0816418a0",
+   "case_index": 54,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 19000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "34876a5be4fc865e",
+   "case_index": 57,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 20000
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 1,
+ "valid_cases": 0,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "228f82019d53985e",
+  "case_index": 0,
+  "params": {
+   "C": 1024,
+   "eps": 1e-05,
+   "N": 1000
+  },
+  "status": "compile_error"
+ },
+ "suite_stopped": {
+  "reason": "compile_error",
+  "at_case": "228f82019d53985e",
+  "position": 0
+ },
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 1,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [],
+ "timing_mode_differs": false,
+ "elapsed_s": 10.869637966156006,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "569364480",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "569827328",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 1693294183,
+ "worker_rc": 0,
+ "worker_wall_s": 11.993198871612549,
+ "device_lock_wait_s": 2120.197890520096,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_7328dw5m"
+}

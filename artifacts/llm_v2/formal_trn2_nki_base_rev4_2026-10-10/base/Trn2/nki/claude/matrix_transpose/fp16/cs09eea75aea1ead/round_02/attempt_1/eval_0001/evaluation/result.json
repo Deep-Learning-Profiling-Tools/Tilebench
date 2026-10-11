@@ -1,0 +1,4357 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "valid",
+ "stages": {
+  "import_compile": {
+   "started": 1791664181.4994903,
+   "ok": true,
+   "elapsed_s": 0.0030982494354248047
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": null,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "1be52843e15146bf81b9",
+  "round": 2,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "84ee6dfae99beee3",
+   "case_index": 0,
+   "params": {
+    "m": 4096,
+    "n": 1024
+   },
+   "problem_size": 1024,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.04409933333333333,
+   "latency_ms_samples": [
+    0.044036,
+    0.044343,
+    0.043919
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.044036,
+     0.044343,
+     0.043919
+    ],
+    "mean_ms": 0.04409933333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_2c532996_t0",
+     "case000_2c532996_t1",
+     "case000_2c532996_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.044036,
+      "union_ms": 0.044036,
+      "span_ms": 0.044036,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "677427121068616"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.044343,
+      "union_ms": 0.044343,
+      "span_ms": 0.044343,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "677427121068616"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.043919,
+      "union_ms": 0.043919,
+      "span_ms": 0.043919,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "677427121068616"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664181.5032275,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.3803870677948
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.151176452636719,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "ead0b0a93117d77a",
+   "case_index": 4,
+   "params": {
+    "m": 4096,
+    "n": 2048
+   },
+   "problem_size": 2048,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.065705,
+   "latency_ms_samples": [
+    0.064908,
+    0.067969,
+    0.064238
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.064908,
+     0.067969,
+     0.064238
+    ],
+    "mean_ms": 0.065705,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case004_c2f00397_t0",
+     "case004_c2f00397_t1",
+     "case004_c2f00397_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.064908,
+      "union_ms": 0.064908,
+      "span_ms": 0.064908,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "370391663724700"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.067969,
+      "union_ms": 0.067969,
+      "span_ms": 0.067969,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "370391663724700"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.064238,
+      "union_ms": 0.064238,
+      "span_ms": 0.064238,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "370391663724700"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664187.7570734,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.9821410179138184
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.869803428649902,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "c53d093a04b8b147",
+   "case_index": 8,
+   "params": {
+    "m": 4096,
+    "n": 3072
+   },
+   "problem_size": 3072,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.09185633333333333,
+   "latency_ms_samples": [
+    0.090334,
+    0.093392,
+    0.091843
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.090334,
+     0.093392,
+     0.091843
+    ],
+    "mean_ms": 0.09185633333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case008_242fe0e0_t0",
+     "case008_242fe0e0_t1",
+     "case008_242fe0e0_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.090334,
+      "union_ms": 0.090334,
+      "span_ms": 0.090334,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1025491908410494"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.093392,
+      "union_ms": 0.093392,
+      "span_ms": 0.093392,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1025491908410494"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.091843,
+      "union_ms": 0.091843,
+      "span_ms": 0.091843,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1025491908410494"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664192.7302318,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.3122811317443848
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.3242106437683105,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "0673d9a1ab2b8d72",
+   "case_index": 12,
+   "params": {
+    "m": 4096,
+    "n": 4096
+   },
+   "problem_size": 4096,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.11992399999999999,
+   "latency_ms_samples": [
+    0.12307,
+    0.118332,
+    0.11837
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.12307,
+     0.118332,
+     0.11837
+    ],
+    "mean_ms": 0.11992399999999999,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_c8ab9970_t0",
+     "case012_c8ab9970_t1",
+     "case012_c8ab9970_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.12307,
+      "union_ms": 0.12307,
+      "span_ms": 0.12307,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "875665207885640"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.118332,
+      "union_ms": 0.118332,
+      "span_ms": 0.118332,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "875665207885640"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.11837,
+      "union_ms": 0.11837,
+      "span_ms": 0.11837,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "875665207885640"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664198.1529932,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.5819694995880127
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.780064344406128,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "b0a065c1f86c779b",
+   "case_index": 16,
+   "params": {
+    "m": 4096,
+    "n": 5120
+   },
+   "problem_size": 5120,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.14894233333333332,
+   "latency_ms_samples": [
+    0.145283,
+    0.14965,
+    0.151894
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.145283,
+     0.14965,
+     0.151894
+    ],
+    "mean_ms": 0.14894233333333332,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case016_67c98fcd_t0",
+     "case016_67c98fcd_t1",
+     "case016_67c98fcd_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.145283,
+      "union_ms": 0.145283,
+      "span_ms": 0.145283,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "374391383609183"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.14965,
+      "union_ms": 0.14965,
+      "span_ms": 0.14965,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "374391383609183"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.151894,
+      "union_ms": 0.151894,
+      "span_ms": 0.151894,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "374391383609183"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664204.0320396,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.9075660705566406
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.2321717739105225,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "fad2cbe0987d5c34",
+   "case_index": 20,
+   "params": {
+    "m": 4096,
+    "n": 6144
+   },
+   "problem_size": 6144,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.17679,
+   "latency_ms_samples": [
+    0.173847,
+    0.177972,
+    0.178551
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.173847,
+     0.177972,
+     0.178551
+    ],
+    "mean_ms": 0.17679,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case020_507b73de_t0",
+     "case020_507b73de_t1",
+     "case020_507b73de_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.173847,
+      "union_ms": 0.173847,
+      "span_ms": 0.173847,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "167517510421576"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.177972,
+      "union_ms": 0.177972,
+      "span_ms": 0.177972,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "167517510421576"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.178551,
+      "union_ms": 0.178551,
+      "span_ms": 0.178551,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "167517510421576"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664210.3853269,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.166409492492676
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.586326360702515,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "86c54bec0ecf07b4",
+   "case_index": 24,
+   "params": {
+    "m": 4096,
+    "n": 7168
+   },
+   "problem_size": 7168,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.20722533333333334,
+   "latency_ms_samples": [
+    0.205923,
+    0.208419,
+    0.207334
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.205923,
+     0.208419,
+     0.207334
+    ],
+    "mean_ms": 0.20722533333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case024_da9c1b84_t0",
+     "case024_da9c1b84_t1",
+     "case024_da9c1b84_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.205923,
+      "union_ms": 0.205923,
+      "span_ms": 0.205923,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "575008580076366"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.208419,
+      "union_ms": 0.208419,
+      "span_ms": 0.208419,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "575008580076366"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.207334,
+      "union_ms": 0.207334,
+      "span_ms": 0.207334,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "575008580076366"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664217.07169,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.4348044395446777
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 7.029198169708252,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d17a9df043d0f16e",
+   "case_index": 28,
+   "params": {
+    "m": 4096,
+    "n": 8192
+   },
+   "problem_size": 8192,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.232375,
+   "latency_ms_samples": [
+    0.233611,
+    0.230767,
+    0.232747
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.233611,
+     0.230767,
+     0.232747
+    ],
+    "mean_ms": 0.232375,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case028_4603372b_t0",
+     "case028_4603372b_t1",
+     "case028_4603372b_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.233611,
+      "union_ms": 0.233611,
+      "span_ms": 0.233611,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "563284265908240"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.230767,
+      "union_ms": 0.230767,
+      "span_ms": 0.230767,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "563284265908240"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.232747,
+      "union_ms": 0.232747,
+      "span_ms": 0.232747,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "563284265908240"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664224.1995761,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.740246295928955
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 7.562089681625366,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "0f88ab1873055fb5",
+   "case_index": 32,
+   "params": {
+    "m": 4096,
+    "n": 9216
+   },
+   "problem_size": 9216,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.25734666666666667,
+   "latency_ms_samples": [
+    0.25953,
+    0.256347,
+    0.256163
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.25953,
+     0.256347,
+     0.256163
+    ],
+    "mean_ms": 0.25734666666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case032_171f88df_t0",
+     "case032_171f88df_t1",
+     "case032_171f88df_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.25953,
+      "union_ms": 0.25953,
+      "span_ms": 0.25953,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "967998293164319"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.256347,
+      "union_ms": 0.256347,
+      "span_ms": 0.256347,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "967998293164319"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.256163,
+      "union_ms": 0.256163,
+      "span_ms": 0.256163,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "967998293164319"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664231.8598714,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.038536071777344
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 7.9347312450408936,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "4c9625e1921bfa69",
+   "case_index": 36,
+   "params": {
+    "m": 4096,
+    "n": 10240
+   },
+   "problem_size": 10240,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.285529,
+   "latency_ms_samples": [
+    0.284962,
+    0.288733,
+    0.282892
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.284962,
+     0.288733,
+     0.282892
+    ],
+    "mean_ms": 0.285529,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case036_eccc1bcd_t0",
+     "case036_eccc1bcd_t1",
+     "case036_eccc1bcd_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.284962,
+      "union_ms": 0.284962,
+      "span_ms": 0.284962,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "617201828679275"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.288733,
+      "union_ms": 0.288733,
+      "span_ms": 0.288733,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "617201828679275"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.282892,
+      "union_ms": 0.282892,
+      "span_ms": 0.282892,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "617201828679275"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664239.9128692,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.414754152297974
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.457813024520874,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "8f27ed7d07b250e4",
+   "case_index": 40,
+   "params": {
+    "m": 4096,
+    "n": 11264
+   },
+   "problem_size": 11264,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.30872700000000003,
+   "latency_ms_samples": [
+    0.309298,
+    0.308342,
+    0.308541
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.309298,
+     0.308342,
+     0.308541
+    ],
+    "mean_ms": 0.30872700000000003,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case040_c2084a4e_t0",
+     "case040_c2084a4e_t1",
+     "case040_c2084a4e_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.309298,
+      "union_ms": 0.309298,
+      "span_ms": 0.309298,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "97371751885760"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.308342,
+      "union_ms": 0.308342,
+      "span_ms": 0.308342,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "97371751885760"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.308541,
+      "union_ms": 0.308541,
+      "span_ms": 0.308541,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "97371751885760"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664248.4691072,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.677972793579102
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.97584867477417,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "a5bb6d1d78323202",
+   "case_index": 44,
+   "params": {
+    "m": 4096,
+    "n": 12288
+   },
+   "problem_size": 12288,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.3318293333333333,
+   "latency_ms_samples": [
+    0.330826,
+    0.330372,
+    0.33429
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.330826,
+     0.330372,
+     0.33429
+    ],
+    "mean_ms": 0.3318293333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case044_c6b093c0_t0",
+     "case044_c6b093c0_t1",
+     "case044_c6b093c0_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.330826,
+      "union_ms": 0.330826,
+      "span_ms": 0.330826,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "942036281601513"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.330372,
+      "union_ms": 0.330372,
+      "span_ms": 0.330372,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "942036281601513"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.33429,
+      "union_ms": 0.33429,
+      "span_ms": 0.33429,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "942036281601513"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664257.5462797,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.957066535949707
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 9.399656534194946,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "19b586f859ce36bd",
+   "case_index": 48,
+   "params": {
+    "m": 4096,
+    "n": 13312
+   },
+   "problem_size": 13312,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.3610903333333333,
+   "latency_ms_samples": [
+    0.36207,
+    0.361459,
+    0.359742
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.36207,
+     0.361459,
+     0.359742
+    ],
+    "mean_ms": 0.3610903333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case048_f94ba0d2_t0",
+     "case048_f94ba0d2_t1",
+     "case048_f94ba0d2_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.36207,
+      "union_ms": 0.36207,
+      "span_ms": 0.36207,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "947173327000036"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.361459,
+      "union_ms": 0.361459,
+      "span_ms": 0.361459,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "947173327000036"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.359742,
+      "union_ms": 0.359742,
+      "span_ms": 0.359742,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "947173327000036"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664267.0447261,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.196703195571899
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 9.715689182281494,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "76387158092b3234",
+   "case_index": 52,
+   "params": {
+    "m": 4096,
+    "n": 14336
+   },
+   "problem_size": 14336,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.38714000000000004,
+   "latency_ms_samples": [
+    0.38664,
+    0.386193,
+    0.388587
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.38664,
+     0.386193,
+     0.388587
+    ],
+    "mean_ms": 0.38714000000000004,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case052_d9ff9b7a_t0",
+     "case052_d9ff9b7a_t1",
+     "case052_d9ff9b7a_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.38664,
+      "union_ms": 0.38664,
+      "span_ms": 0.38664,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "317949056087219"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.386193,
+      "union_ms": 0.386193,
+      "span_ms": 0.386193,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "317949056087219"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.388587,
+      "union_ms": 0.388587,
+      "span_ms": 0.388587,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "317949056087219"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664276.859664,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.513305425643921
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 10.355920314788818,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "aa92c94f99e6ee8d",
+   "case_index": 56,
+   "params": {
+    "m": 4096,
+    "n": 15360
+   },
+   "problem_size": 15360,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.412388,
+   "latency_ms_samples": [
+    0.416515,
+    0.410792,
+    0.409857
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.416515,
+     0.410792,
+     0.409857
+    ],
+    "mean_ms": 0.412388,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case056_e008dd30_t0",
+     "case056_e008dd30_t1",
+     "case056_e008dd30_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.416515,
+      "union_ms": 0.416515,
+      "span_ms": 0.416515,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "946740473590449"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.410792,
+      "union_ms": 0.410792,
+      "span_ms": 0.410792,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "946740473590449"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.409857,
+      "union_ms": 0.409857,
+      "span_ms": 0.409857,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "946740473590449"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664287.313085,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.824759244918823
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 10.583775281906128,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "c851d7df4d1e8afd",
+   "case_index": 60,
+   "params": {
+    "m": 4096,
+    "n": 16384
+   },
+   "problem_size": 16384,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.46441400000000005,
+   "latency_ms_samples": [
+    0.46624,
+    0.468328,
+    0.458674
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.46624,
+     0.468328,
+     0.458674
+    ],
+    "mean_ms": 0.46441400000000005,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case060_696dce26_t0",
+     "case060_696dce26_t1",
+     "case060_696dce26_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.46624,
+      "union_ms": 0.46624,
+      "span_ms": 0.46624,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "563478967073618"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.468328,
+      "union_ms": 0.468328,
+      "span_ms": 0.468328,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "563478967073618"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.458674,
+      "union_ms": 0.458674,
+      "span_ms": 0.458674,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "563478967073618"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664297.9983132,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 6.135789155960083
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 11.099977016448975,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "bbbfbe3b5bcb2f8f",
+   "case_index": 64,
+   "params": {
+    "m": 4096,
+    "n": 17408
+   },
+   "problem_size": 17408,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.46174800000000005,
+   "latency_ms_samples": [
+    0.464768,
+    0.459007,
+    0.461469
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.464768,
+     0.459007,
+     0.461469
+    ],
+    "mean_ms": 0.46174800000000005,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case064_742ad81b_t0",
+     "case064_742ad81b_t1",
+     "case064_742ad81b_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.464768,
+      "union_ms": 0.464768,
+      "span_ms": 0.464768,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "118090044163979"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.459007,
+      "union_ms": 0.459007,
+      "span_ms": 0.459007,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "118090044163979"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.461469,
+      "union_ms": 0.461469,
+      "span_ms": 0.461469,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "118090044163979"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664309.1972208,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 6.420530796051025
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 11.593098402023315,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "2b886fe2e725a257",
+   "case_index": 68,
+   "params": {
+    "m": 4096,
+    "n": 18432
+   },
+   "problem_size": 18432,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.4910543333333333,
+   "latency_ms_samples": [
+    0.492158,
+    0.489601,
+    0.491404
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.492158,
+     0.489601,
+     0.491404
+    ],
+    "mean_ms": 0.4910543333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case068_f4220f0d_t0",
+     "case068_f4220f0d_t1",
+     "case068_f4220f0d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.492158,
+      "union_ms": 0.492158,
+      "span_ms": 0.492158,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "107499970984545"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.489601,
+      "union_ms": 0.489601,
+      "span_ms": 0.489601,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "107499970984545"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.491404,
+      "union_ms": 0.491404,
+      "span_ms": 0.491404,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "107499970984545"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664320.8900118,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 6.707223653793335
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 12.039682626724243,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "8ccaa74a62df619b",
+   "case_index": 72,
+   "params": {
+    "m": 4096,
+    "n": 19456
+   },
+   "problem_size": 19456,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.5159433333333333,
+   "latency_ms_samples": [
+    0.517115,
+    0.517713,
+    0.513002
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.517115,
+     0.517713,
+     0.513002
+    ],
+    "mean_ms": 0.5159433333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case072_fe406e4a_t0",
+     "case072_fe406e4a_t1",
+     "case072_fe406e4a_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.517115,
+      "union_ms": 0.517115,
+      "span_ms": 0.517115,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "308871946073795"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.517713,
+      "union_ms": 0.517713,
+      "span_ms": 0.517713,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "308871946073795"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.513002,
+      "union_ms": 0.513002,
+      "span_ms": 0.513002,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "308871946073795"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664333.0317419,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 7.036679983139038
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 12.609194040298462,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "b34b3209cb3af591",
+   "case_index": 76,
+   "params": {
+    "m": 4096,
+    "n": 20480
+   },
+   "problem_size": 20480,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "chunk_cols": 1024,
+    "core_split": "x row halves per program (LNC=2)",
+    "evict_engines": "vector+scalar split per tile (one bank each)",
+    "in_slots": 3,
+    "out_slots": 8,
+    "out_tile_width": 2048,
+    "prefetch_units": 2,
+    "psum_group": 2,
+    "rows_per_load_dma": 512,
+    "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+    "transpose_tile": 128
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "chunk_cols": 1024,
+      "core_split": "x row halves per program (LNC=2)",
+      "evict_engines": "vector+scalar split per tile (one bank each)",
+      "in_slots": 3,
+      "out_slots": 8,
+      "out_tile_width": 2048,
+      "prefetch_units": 2,
+      "psum_group": 2,
+      "rows_per_load_dma": 512,
+      "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+      "transpose_tile": 128
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.5414023333333333,
+   "latency_ms_samples": [
+    0.539608,
+    0.542732,
+    0.541867
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.539608,
+     0.542732,
+     0.541867
+    ],
+    "mean_ms": 0.5414023333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case076_a05286ae_t0",
+     "case076_a05286ae_t1",
+     "case076_a05286ae_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.539608,
+      "union_ms": 0.539608,
+      "span_ms": 0.539608,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "228718430634669"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.542732,
+      "union_ms": 0.542732,
+      "span_ms": 0.542732,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "228718430634669"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.541867,
+      "union_ms": 0.541867,
+      "span_ms": 0.541867,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "228718430634669"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791664345.7405133,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 7.352770566940308
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 12.973235368728638,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 20,
+ "valid_cases": 20,
+ "latency_ms_geomean": 0.24302905161265523,
+ "first_failing_case": null,
+ "suite_stopped": null,
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 161,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "chunk_cols": 1024,
+   "core_split": "x row halves per program (LNC=2)",
+   "evict_engines": "vector+scalar split per tile (one bank each)",
+   "in_slots": 3,
+   "out_slots": 8,
+   "out_tile_width": 2048,
+   "prefetch_units": 2,
+   "psum_group": 2,
+   "rows_per_load_dma": 512,
+   "transpose_engine": "tensor (nc_transpose, fp16 psum)",
+   "transpose_tile": 128
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 185.3591079711914,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "567070720",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "568586240",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 1609091483,
+ "worker_rc": 0,
+ "worker_wall_s": 186.49190378189087,
+ "device_lock_wait_s": 2127.289546728134,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_transpose_2_1_hd0n24c1"
+}

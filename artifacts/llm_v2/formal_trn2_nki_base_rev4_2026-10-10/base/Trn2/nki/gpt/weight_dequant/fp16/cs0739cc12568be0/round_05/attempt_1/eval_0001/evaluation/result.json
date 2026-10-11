@@ -1,0 +1,426 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "compile_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791692924.9181235,
+   "ok": true,
+   "elapsed_s": 0.0023603439331054688
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py\", line 179, in run\n    return _weight_dequant[2](\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('BLOCKS_PER_CHUNK', 4), ('M', 512), ('N', 512), ('T', 128)):g2|[512,512]:Half:S(C)|[4,4]:Half:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel:\nCollected 3 different diagnostics:\n- [x2] error: failed to lower dma_copy\n- [x1] warning: the 'is not' operator is not supported in NKI, use '!='\n- [x2] error: cannot align DMA operands: HBM tensor has 32 elements in its outer dimension, which is not divisible by the SBUF/PSUM partition count (128); ensure the HBM slice shape is divisible by the SBUF/PSUM partition dimension\n\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: cannot align DMA operands: HBM tensor has 32 elements in its outer dimension, which is not divisible by the SBUF/PSUM partition count (128); ensure the HBM slice shape is divisible by the SBUF/PSUM partition dimension\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: failed to lower dma_copy\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from here\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: when tracing NKI kernel\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: cannot align DMA operands: HBM tensor has 32 elements in its outer dimension, which is not divisible by the SBUF/PSUM partition count (128); ensure the HBM slice shape is divisible by the SBUF/PSUM partition dimension\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: failed to lower dma_copy\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from here\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: when tracing NKI kernel\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py(179): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "4dc6668a638958185c98",
+  "round": 5,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "cc87af06704b6d08",
+   "case_index": 0,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 512
+   },
+   "problem_size": 262144,
+   "status": "compile_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py\", line 179, in run\n    return _weight_dequant[2](\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('BLOCKS_PER_CHUNK', 4), ('M', 512), ('N', 512), ('T', 128)):g2|[512,512]:Half:S(C)|[4,4]:Half:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel:\nCollected 3 different diagnostics:\n- [x2] error: failed to lower dma_copy\n- [x1] warning: the 'is not' operator is not supported in NKI, use '!='\n- [x2] error: cannot align DMA operands: HBM tensor has 32 elements in its outer dimension, which is not divisible by the SBUF/PSUM partition count (128); ensure the HBM slice shape is divisible by the SBUF/PSUM partition dimension\n\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: cannot align DMA operands: HBM tensor has 32 elements in its outer dimension, which is not divisible by the SBUF/PSUM partition count (128); ensure the HBM slice shape is divisible by the SBUF/PSUM partition dimension\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: failed to lower dma_copy\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from here\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: when tracing NKI kernel\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: cannot align DMA operands: HBM tensor has 32 elements in its outer dimension, which is not divisible by the SBUF/PSUM partition count (128); ensure the HBM slice shape is divisible by the SBUF/PSUM partition dimension\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:234:18: error: failed to lower dma_copy\n        result = get_backend().dma_copy(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: called from\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:76:9: note: called from here\n        nisa.dma_copy(\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py:55:1: note: when tracing NKI kernel\ndef _weight_dequant(X, S, M, N, T, BLOCKS_PER_CHUNK):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz/impl_nki.py(179): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791692924.921137,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.9167861938476562,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "038908e1696fb6b7",
+   "case_index": 3,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 1024
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "7a2fb50a6876a4e5",
+   "case_index": 6,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 1536
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "abe9763b960ebd18",
+   "case_index": 9,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 2048
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "9faa6a00f64b1999",
+   "case_index": 12,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 2560
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "9f7c016d67ca6dc7",
+   "case_index": 15,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 3072
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "c71517a1c56789ea",
+   "case_index": 18,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 3584
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "e09d9750b355a6f7",
+   "case_index": 21,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "0f60877405d3ba66",
+   "case_index": 24,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 4608
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "d97aa06f27f0127b",
+   "case_index": 27,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 5120
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "8e3a62613ec06454",
+   "case_index": 30,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 5632
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "7af39faa20aff343",
+   "case_index": 33,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 6144
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "80dddfe8c3c43ae9",
+   "case_index": 36,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 6656
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "baba16ef815ec581",
+   "case_index": 39,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 7168
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "fa690950a60336d7",
+   "case_index": 42,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 7680
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "6541bfbfb3934797",
+   "case_index": 45,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 8192
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "4817ed8dc86c3c50",
+   "case_index": 48,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 8704
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "da86dcc76572b40a",
+   "case_index": 51,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 9216
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "2c73237e3023ffba",
+   "case_index": 54,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 9728
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "a53681fdfef8c918",
+   "case_index": 57,
+   "params": {
+    "TILE_SIZE": 128,
+    "M": 10240
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 1,
+ "valid_cases": 0,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "cc87af06704b6d08",
+  "case_index": 0,
+  "params": {
+   "TILE_SIZE": 128,
+   "M": 512
+  },
+  "status": "compile_error"
+ },
+ "suite_stopped": {
+  "reason": "compile_error",
+  "at_case": "cc87af06704b6d08",
+  "position": 0
+ },
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 1,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [],
+ "timing_mode_differs": false,
+ "elapsed_s": 9.809326171875,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "783273984",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "783527936",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 343708454,
+ "worker_rc": 0,
+ "worker_wall_s": 10.923885822296143,
+ "device_lock_wait_s": 6.222724914550781e-05,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/weight_dequant_5_1_1_8w61mz"
+}

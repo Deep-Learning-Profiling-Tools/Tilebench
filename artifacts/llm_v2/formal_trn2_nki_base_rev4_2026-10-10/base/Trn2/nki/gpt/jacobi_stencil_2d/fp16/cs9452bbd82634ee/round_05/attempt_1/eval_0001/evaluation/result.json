@@ -1,0 +1,1771 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "compile_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791692515.630207,
+   "ok": true,
+   "elapsed_s": 0.0039250850677490234
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 407, in run_case\n    sync()\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/neuron.py\", line 307, in synchronize\n    torch_neuronx.synchronize(device)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/__init__.py\", line 596, in synchronize\n    _C._neuron_synchronize(device_index)\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1548, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\nRuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global;\nerror message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: [INTERNAL_ERROR] [NCC_INLA001] Unhandled exception with message: === BIR verification failed ===\nMemory Location: {_mem_0}@SB<0,0>(128x41024)#Internal DebugInfo: <_mem_0||[128, 20512]>\"\nneff cache key=nki_74__jacobi_column_pipeline_a31b1e3e63dc87c5_(('cols', 3584), ('column_tile', 1280), ('column_tiles', 3), ('row_group', 14), ('rows', 3584))_[2]_((torch.Size([3584, 3584]), torch.float16),):bafa76eb59bdb7612a8b38ea274ab3ef471dee3075a75d950eb0f9b871f2ce4c\nNote: Neuron errors are reported asynchronously. The Python traceback shows where the\nerror was detected (synchronization point), not necessarily where the failing operation\nwas dispatched. For synchronous error reporting, set NEURON_LAUNCH_BLOCKING=1.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "ca7185195d731a53561d",
+  "round": 5,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "8f12bbdf484d98e8",
+   "case_index": 0,
+   "params": {
+    "rows": 512
+   },
+   "problem_size": 262144,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "arithmetic": "fp16_sequential_add",
+    "boundary": "on_chip_restore_single_store",
+    "column_tile": 512,
+    "column_tiles": 1,
+    "columns": 512,
+    "halo_buffers": 1,
+    "kernel": "jacobi_full_width",
+    "lnc": 2,
+    "partition_tile": 128,
+    "result_buffers": 1,
+    "rows": 512,
+    "rows_per_partition": 2,
+    "sbuf_bytes_per_partition": 6144,
+    "scale_engine": "vector"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 512,
+      "column_tiles": 1,
+      "columns": 512,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 512,
+      "rows_per_partition": 2,
+      "sbuf_bytes_per_partition": 6144,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 512,
+      "column_tiles": 1,
+      "columns": 512,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 512,
+      "rows_per_partition": 2,
+      "sbuf_bytes_per_partition": 6144,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 512,
+      "column_tiles": 1,
+      "columns": 512,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 512,
+      "rows_per_partition": 2,
+      "sbuf_bytes_per_partition": 6144,
+      "scale_engine": "vector"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.024975999999999998,
+   "latency_ms_samples": [
+    0.025564,
+    0.024661,
+    0.024703
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.025564,
+     0.024661,
+     0.024703
+    ],
+    "mean_ms": 0.024975999999999998,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_5facb13f_t0",
+     "case000_5facb13f_t1",
+     "case000_5facb13f_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/jacobi_stencil_2d_5_1_4ut3es8y/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.025564,
+      "union_ms": 0.025564,
+      "span_ms": 0.025564,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "940169608593517"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024661,
+      "union_ms": 0.024661,
+      "span_ms": 0.024661,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "940169608593517"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024703,
+      "union_ms": 0.024703,
+      "span_ms": 0.024703,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "940169608593517"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791692515.634745,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.0271925926208496
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.665139198303223,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "a164cc7a9d33157b",
+   "case_index": 3,
+   "params": {
+    "rows": 1024
+   },
+   "problem_size": 1048576,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "arithmetic": "fp16_sequential_add",
+    "boundary": "on_chip_restore_single_store",
+    "column_tile": 1024,
+    "column_tiles": 1,
+    "columns": 1024,
+    "halo_buffers": 1,
+    "kernel": "jacobi_full_width",
+    "lnc": 2,
+    "partition_tile": 128,
+    "result_buffers": 1,
+    "rows": 1024,
+    "rows_per_partition": 4,
+    "sbuf_bytes_per_partition": 20480,
+    "scale_engine": "vector"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 1024,
+      "column_tiles": 1,
+      "columns": 1024,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 1024,
+      "rows_per_partition": 4,
+      "sbuf_bytes_per_partition": 20480,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 1024,
+      "column_tiles": 1,
+      "columns": 1024,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 1024,
+      "rows_per_partition": 4,
+      "sbuf_bytes_per_partition": 20480,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 1024,
+      "column_tiles": 1,
+      "columns": 1024,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 1024,
+      "rows_per_partition": 4,
+      "sbuf_bytes_per_partition": 20480,
+      "scale_engine": "vector"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.03557366666666667,
+   "latency_ms_samples": [
+    0.035851,
+    0.035519,
+    0.035351
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.035851,
+     0.035519,
+     0.035351
+    ],
+    "mean_ms": 0.03557366666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case003_49867093_t0",
+     "case003_49867093_t1",
+     "case003_49867093_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/jacobi_stencil_2d_5_1_4ut3es8y/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.035851,
+      "union_ms": 0.035851,
+      "span_ms": 0.035851,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "970089936130484"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.035519,
+      "union_ms": 0.035519,
+      "span_ms": 0.035519,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "970089936130484"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.035351,
+      "union_ms": 0.035351,
+      "span_ms": 0.035351,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "970089936130484"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791692521.401027,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.2844202518463135
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.890498638153076,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "8db3249a9ef9f725",
+   "case_index": 6,
+   "params": {
+    "rows": 1536
+   },
+   "problem_size": 2359296,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "arithmetic": "fp16_sequential_add",
+    "boundary": "on_chip_restore_single_store",
+    "column_tile": 1536,
+    "column_tiles": 1,
+    "columns": 1536,
+    "halo_buffers": 1,
+    "kernel": "jacobi_full_width",
+    "lnc": 2,
+    "partition_tile": 128,
+    "result_buffers": 1,
+    "rows": 1536,
+    "rows_per_partition": 6,
+    "sbuf_bytes_per_partition": 43008,
+    "scale_engine": "vector"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 1536,
+      "column_tiles": 1,
+      "columns": 1536,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 1536,
+      "rows_per_partition": 6,
+      "sbuf_bytes_per_partition": 43008,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 1536,
+      "column_tiles": 1,
+      "columns": 1536,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 1536,
+      "rows_per_partition": 6,
+      "sbuf_bytes_per_partition": 43008,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 1536,
+      "column_tiles": 1,
+      "columns": 1536,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 1536,
+      "rows_per_partition": 6,
+      "sbuf_bytes_per_partition": 43008,
+      "scale_engine": "vector"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.051777333333333335,
+   "latency_ms_samples": [
+    0.052035,
+    0.051541,
+    0.051756
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.052035,
+     0.051541,
+     0.051756
+    ],
+    "mean_ms": 0.051777333333333335,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case006_2f57282a_t0",
+     "case006_2f57282a_t1",
+     "case006_2f57282a_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/jacobi_stencil_2d_5_1_4ut3es8y/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.052035,
+      "union_ms": 0.052035,
+      "span_ms": 0.052035,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "365883024592561"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.051541,
+      "union_ms": 0.051541,
+      "span_ms": 0.051541,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "365883024592561"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.051756,
+      "union_ms": 0.051756,
+      "span_ms": 0.051756,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "365883024592561"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791692525.392413,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3271596431732178
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.951793909072876,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "b445f0d657ec0e79",
+   "case_index": 9,
+   "params": {
+    "rows": 2048
+   },
+   "problem_size": 4194304,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "arithmetic": "fp16_sequential_add",
+    "boundary": "on_chip_restore_single_store",
+    "column_tile": 2048,
+    "column_tiles": 1,
+    "columns": 2048,
+    "halo_buffers": 1,
+    "kernel": "jacobi_full_width",
+    "lnc": 2,
+    "partition_tile": 128,
+    "result_buffers": 1,
+    "rows": 2048,
+    "rows_per_partition": 8,
+    "sbuf_bytes_per_partition": 73728,
+    "scale_engine": "vector"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 2048,
+      "column_tiles": 1,
+      "columns": 2048,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 2048,
+      "rows_per_partition": 8,
+      "sbuf_bytes_per_partition": 73728,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 2048,
+      "column_tiles": 1,
+      "columns": 2048,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 2048,
+      "rows_per_partition": 8,
+      "sbuf_bytes_per_partition": 73728,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 2048,
+      "column_tiles": 1,
+      "columns": 2048,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 2048,
+      "rows_per_partition": 8,
+      "sbuf_bytes_per_partition": 73728,
+      "scale_engine": "vector"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.07678,
+   "latency_ms_samples": [
+    0.07724,
+    0.076628,
+    0.076472
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.07724,
+     0.076628,
+     0.076472
+    ],
+    "mean_ms": 0.07678,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case009_e109b032_t0",
+     "case009_e109b032_t1",
+     "case009_e109b032_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/jacobi_stencil_2d_5_1_4ut3es8y/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.07724,
+      "union_ms": 0.07724,
+      "span_ms": 0.07724,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "769985110413908"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.076628,
+      "union_ms": 0.076628,
+      "span_ms": 0.076628,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "769985110413908"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.076472,
+      "union_ms": 0.076472,
+      "span_ms": 0.076472,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "769985110413908"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791692529.4461813,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3227787017822266
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.9572434425354004,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3873a0c26736666a",
+   "case_index": 12,
+   "params": {
+    "rows": 2560
+   },
+   "problem_size": 6553600,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "arithmetic": "fp16_sequential_add",
+    "boundary": "on_chip_restore_single_store",
+    "column_tile": 2560,
+    "column_tiles": 1,
+    "columns": 2560,
+    "halo_buffers": 1,
+    "kernel": "jacobi_full_width",
+    "lnc": 2,
+    "partition_tile": 128,
+    "result_buffers": 1,
+    "rows": 2560,
+    "rows_per_partition": 10,
+    "sbuf_bytes_per_partition": 112640,
+    "scale_engine": "vector"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 2560,
+      "column_tiles": 1,
+      "columns": 2560,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 2560,
+      "rows_per_partition": 10,
+      "sbuf_bytes_per_partition": 112640,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 2560,
+      "column_tiles": 1,
+      "columns": 2560,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 2560,
+      "rows_per_partition": 10,
+      "sbuf_bytes_per_partition": 112640,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 2560,
+      "column_tiles": 1,
+      "columns": 2560,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 2560,
+      "rows_per_partition": 10,
+      "sbuf_bytes_per_partition": 112640,
+      "scale_engine": "vector"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.10845366666666667,
+   "latency_ms_samples": [
+    0.108897,
+    0.108414,
+    0.10805
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.108897,
+     0.108414,
+     0.10805
+    ],
+    "mean_ms": 0.10845366666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_1de267b7_t0",
+     "case012_1de267b7_t1",
+     "case012_1de267b7_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/jacobi_stencil_2d_5_1_4ut3es8y/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.108897,
+      "union_ms": 0.108897,
+      "span_ms": 0.108897,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "881046829304737"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.108414,
+      "union_ms": 0.108414,
+      "span_ms": 0.108414,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "881046829304737"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.10805,
+      "union_ms": 0.10805,
+      "span_ms": 0.10805,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "881046829304737"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791692533.503837,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3680858612060547
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.05558705329895,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "baf66a2b53faa4a0",
+   "case_index": 15,
+   "params": {
+    "rows": 3072
+   },
+   "problem_size": 9437184,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "arithmetic": "fp16_sequential_add",
+    "boundary": "on_chip_restore_single_store",
+    "column_tile": 3072,
+    "column_tiles": 1,
+    "columns": 3072,
+    "halo_buffers": 1,
+    "kernel": "jacobi_full_width",
+    "lnc": 2,
+    "partition_tile": 128,
+    "result_buffers": 1,
+    "rows": 3072,
+    "rows_per_partition": 12,
+    "sbuf_bytes_per_partition": 159744,
+    "scale_engine": "vector"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 3072,
+      "column_tiles": 1,
+      "columns": 3072,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 3072,
+      "rows_per_partition": 12,
+      "sbuf_bytes_per_partition": 159744,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 3072,
+      "column_tiles": 1,
+      "columns": 3072,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 3072,
+      "rows_per_partition": 12,
+      "sbuf_bytes_per_partition": 159744,
+      "scale_engine": "vector"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "arithmetic": "fp16_sequential_add",
+      "boundary": "on_chip_restore_single_store",
+      "column_tile": 3072,
+      "column_tiles": 1,
+      "columns": 3072,
+      "halo_buffers": 1,
+      "kernel": "jacobi_full_width",
+      "lnc": 2,
+      "partition_tile": 128,
+      "result_buffers": 1,
+      "rows": 3072,
+      "rows_per_partition": 12,
+      "sbuf_bytes_per_partition": 159744,
+      "scale_engine": "vector"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.14785066666666666,
+   "latency_ms_samples": [
+    0.148161,
+    0.147392,
+    0.147999
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.148161,
+     0.147392,
+     0.147999
+    ],
+    "mean_ms": 0.14785066666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case015_36b3f342_t0",
+     "case015_36b3f342_t1",
+     "case015_36b3f342_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/jacobi_stencil_2d_5_1_4ut3es8y/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.148161,
+      "union_ms": 0.148161,
+      "span_ms": 0.148161,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1049034741439496"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.147392,
+      "union_ms": 0.147392,
+      "span_ms": 0.147392,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1049034741439496"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.147999,
+      "union_ms": 0.147999,
+      "span_ms": 0.147999,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1049034741439496"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791692537.6591785,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4176361560821533
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.2386767864227295,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "da9c05b5809826f5",
+   "case_index": 18,
+   "params": {
+    "rows": 3584
+   },
+   "problem_size": 12845056,
+   "status": "compile_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 407, in run_case\n    sync()\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/neuron.py\", line 307, in synchronize\n    torch_neuronx.synchronize(device)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/__init__.py\", line 596, in synchronize\n    _C._neuron_synchronize(device_index)\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1548, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\nRuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global;\nerror message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: [INTERNAL_ERROR] [NCC_INLA001] Unhandled exception with message: === BIR verification failed ===\nMemory Location: {_mem_0}@SB<0,0>(128x41024)#Internal DebugInfo: <_mem_0||[128, 20512]>\"\nneff cache key=nki_74__jacobi_column_pipeline_a31b1e3e63dc87c5_(('cols', 3584), ('column_tile', 1280), ('column_tiles', 3), ('row_group', 14), ('rows', 3584))_[2]_((torch.Size([3584, 3584]), torch.float16),):bafa76eb59bdb7612a8b38ea274ab3ef471dee3075a75d950eb0f9b871f2ce4c\nNote: Neuron errors are reported asynchronously. The Python traceback shows where the\nerror was detected (synchronization point), not necessarily where the failing operation\nwas dispatched. For synchronous error reporting, set NEURON_LAUNCH_BLOCKING=1.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791692541.995404,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.29677414894104,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "034beda9d6c73533",
+   "case_index": 21,
+   "params": {
+    "rows": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "b894fae825768943",
+   "case_index": 24,
+   "params": {
+    "rows": 4608
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "097cb1ad731bfd65",
+   "case_index": 27,
+   "params": {
+    "rows": 5120
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "bce5f65f94372367",
+   "case_index": 30,
+   "params": {
+    "rows": 5632
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "85fa69ab193db85c",
+   "case_index": 33,
+   "params": {
+    "rows": 6144
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "8bf1d44acaadcbc7",
+   "case_index": 36,
+   "params": {
+    "rows": 6656
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "221639e0b1d7f032",
+   "case_index": 39,
+   "params": {
+    "rows": 7168
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "88993d86df4ea305",
+   "case_index": 42,
+   "params": {
+    "rows": 7680
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "0c82f5669d6f09bb",
+   "case_index": 45,
+   "params": {
+    "rows": 8192
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "dc654e4cb9c5e63d",
+   "case_index": 48,
+   "params": {
+    "rows": 8704
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "66b5bec7705071c2",
+   "case_index": 51,
+   "params": {
+    "rows": 9216
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "da4eab03638cd416",
+   "case_index": 54,
+   "params": {
+    "rows": 9728
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  },
+  {
+   "case_id": "cd7363c4e8c5b410",
+   "case_index": 57,
+   "params": {
+    "rows": 10240
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 7 (compile_error)"
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 7,
+ "valid_cases": 6,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "da9c05b5809826f5",
+  "case_index": 18,
+  "params": {
+   "rows": 3584
+  },
+  "status": "compile_error"
+ },
+ "suite_stopped": {
+  "reason": "compile_error",
+  "at_case": "da9c05b5809826f5",
+  "position": 6
+ },
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 50,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "arithmetic": "fp16_sequential_add",
+   "boundary": "on_chip_restore_single_store",
+   "column_tile": 512,
+   "column_tiles": 1,
+   "columns": 512,
+   "halo_buffers": 1,
+   "kernel": "jacobi_full_width",
+   "lnc": 2,
+   "partition_tile": 128,
+   "result_buffers": 1,
+   "rows": 512,
+   "rows_per_partition": 2,
+   "sbuf_bytes_per_partition": 6144,
+   "scale_engine": "vector"
+  },
+  {
+   "arithmetic": "fp16_sequential_add",
+   "boundary": "on_chip_restore_single_store",
+   "column_tile": 1024,
+   "column_tiles": 1,
+   "columns": 1024,
+   "halo_buffers": 1,
+   "kernel": "jacobi_full_width",
+   "lnc": 2,
+   "partition_tile": 128,
+   "result_buffers": 1,
+   "rows": 1024,
+   "rows_per_partition": 4,
+   "sbuf_bytes_per_partition": 20480,
+   "scale_engine": "vector"
+  },
+  {
+   "arithmetic": "fp16_sequential_add",
+   "boundary": "on_chip_restore_single_store",
+   "column_tile": 1536,
+   "column_tiles": 1,
+   "columns": 1536,
+   "halo_buffers": 1,
+   "kernel": "jacobi_full_width",
+   "lnc": 2,
+   "partition_tile": 128,
+   "result_buffers": 1,
+   "rows": 1536,
+   "rows_per_partition": 6,
+   "sbuf_bytes_per_partition": 43008,
+   "scale_engine": "vector"
+  },
+  {
+   "arithmetic": "fp16_sequential_add",
+   "boundary": "on_chip_restore_single_store",
+   "column_tile": 2048,
+   "column_tiles": 1,
+   "columns": 2048,
+   "halo_buffers": 1,
+   "kernel": "jacobi_full_width",
+   "lnc": 2,
+   "partition_tile": 128,
+   "result_buffers": 1,
+   "rows": 2048,
+   "rows_per_partition": 8,
+   "sbuf_bytes_per_partition": 73728,
+   "scale_engine": "vector"
+  },
+  {
+   "arithmetic": "fp16_sequential_add",
+   "boundary": "on_chip_restore_single_store",
+   "column_tile": 2560,
+   "column_tiles": 1,
+   "columns": 2560,
+   "halo_buffers": 1,
+   "kernel": "jacobi_full_width",
+   "lnc": 2,
+   "partition_tile": 128,
+   "result_buffers": 1,
+   "rows": 2560,
+   "rows_per_partition": 10,
+   "sbuf_bytes_per_partition": 112640,
+   "scale_engine": "vector"
+  },
+  {
+   "arithmetic": "fp16_sequential_add",
+   "boundary": "on_chip_restore_single_store",
+   "column_tile": 3072,
+   "column_tiles": 1,
+   "columns": 3072,
+   "halo_buffers": 1,
+   "kernel": "jacobi_full_width",
+   "lnc": 2,
+   "partition_tile": 128,
+   "result_buffers": 1,
+   "rows": 3072,
+   "rows_per_partition": 12,
+   "sbuf_bytes_per_partition": 159744,
+   "scale_engine": "vector"
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 37.64410662651062,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "778760192",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "779452416",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 1106100888,
+ "worker_rc": 0,
+ "worker_wall_s": 38.75742220878601,
+ "device_lock_wait_s": 270.76297426223755,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/jacobi_stencil_2d_5_1_4ut3es8y"
+}

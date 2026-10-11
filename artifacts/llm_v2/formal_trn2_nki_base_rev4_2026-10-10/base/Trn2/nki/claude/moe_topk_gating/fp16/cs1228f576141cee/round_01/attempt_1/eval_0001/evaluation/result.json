@@ -1,0 +1,447 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "compile_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791651978.3751538,
+   "ok": true,
+   "elapsed_s": 0.003265857696533203
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py\", line 199, in run\n    weights, indices = _moe_topk_gating_kernel(logits, kk, r_tile, idx_mask)\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('idx_mask', 127), ('k', 2), ('r_tile', 8)):g2|[1024,128]:Half:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel:\nCollected 2 different diagnostics:\n- [x2] error: invalid kwarg 'op': unsupported operator 'divide'\n- [x1] warning: the 'is not' operator is not supported in NKI, use '!='\n\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:199:18: error: invalid kwarg 'op': unsupported operator 'divide'\n        result = get_backend().tensor_tensor_arith(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: called from\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from here\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: when tracing NKI kernel\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:199:18: error: invalid kwarg 'op': unsupported operator 'divide'\n        result = get_backend().tensor_tensor_arith(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: called from\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from here\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: when tracing NKI kernel\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py(199): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "632f716aa83ac4791f68",
+  "round": 1,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "f1a0e95dcf930bda",
+   "case_index": 0,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 1024
+   },
+   "problem_size": 131072,
+   "status": "compile_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py\", line 199, in run\n    weights, indices = _moe_topk_gating_kernel(logits, kk, r_tile, idx_mask)\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('idx_mask', 127), ('k', 2), ('r_tile', 8)):g2|[1024,128]:Half:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel:\nCollected 2 different diagnostics:\n- [x2] error: invalid kwarg 'op': unsupported operator 'divide'\n- [x1] warning: the 'is not' operator is not supported in NKI, use '!='\n\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:199:18: error: invalid kwarg 'op': unsupported operator 'divide'\n        result = get_backend().tensor_tensor_arith(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: called from\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from here\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: when tracing NKI kernel\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:199:18: error: invalid kwarg 'op': unsupported operator 'divide'\n        result = get_backend().tensor_tensor_arith(\n                 ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: called from\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:170:9: note: called from here\n        nisa.tensor_tensor(dst=wt[:, j:QK:k], data1=ex[:, j:QK:k], data2=ssum,\n        ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py:86:1: note: when tracing NKI kernel\ndef _moe_topk_gating_kernel(logits, k, r_tile, idx_mask):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg/impl_nki.py(199): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791651978.3790448,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.9458796977996826,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "a1b353f8a12118cd",
+   "case_index": 3,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 2048
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "1f00566a74e5b64f",
+   "case_index": 6,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 3072
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "1e362a80b4d392a8",
+   "case_index": 9,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "f66beb18755d867e",
+   "case_index": 12,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 5120
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "78dc77c748c9ee6c",
+   "case_index": 15,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 6144
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "bb8cf239765604b8",
+   "case_index": 18,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 7168
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "984c788f0835e37d",
+   "case_index": 21,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 8192
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "fa83cfb8d946b285",
+   "case_index": 24,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 9216
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "b5c0807baa6327b3",
+   "case_index": 27,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 10240
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "bf91b5ca290970ad",
+   "case_index": 30,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 11264
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "9e4b420f54d6766b",
+   "case_index": 33,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 12288
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "d2526a5412c5b71f",
+   "case_index": 36,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 13312
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "11ea5e0ec2f5eda2",
+   "case_index": 39,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 14336
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "0c3627488b347428",
+   "case_index": 42,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 15360
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "773db2e0e1213386",
+   "case_index": 45,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 16384
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "f6c10ad561a06f8d",
+   "case_index": 48,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 17408
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "5a34cf2d3fb9def4",
+   "case_index": 51,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 18432
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "290eb8b19d683fd5",
+   "case_index": 54,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 19456
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "93cd7619d0a3f1e5",
+   "case_index": 57,
+   "params": {
+    "E": 128,
+    "k": 2,
+    "M": 20480
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 1,
+ "valid_cases": 0,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "f1a0e95dcf930bda",
+  "case_index": 0,
+  "params": {
+   "E": 128,
+   "k": 2,
+   "M": 1024
+  },
+  "status": "compile_error"
+ },
+ "suite_stopped": {
+  "reason": "compile_error",
+  "at_case": "f1a0e95dcf930bda",
+  "position": 0
+ },
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 1,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [],
+ "timing_mode_differs": false,
+ "elapsed_s": 11.61361813545227,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "485519360",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "485519360",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 18694107,
+ "worker_rc": 0,
+ "worker_wall_s": 12.717102766036987,
+ "device_lock_wait_s": 161.29686999320984,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/moe_topk_gating_1_1_c4ui5ibg"
+}

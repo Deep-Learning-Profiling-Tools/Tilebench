@@ -1,0 +1,292 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/2",
+ "operator": "matrix_copy",
+ "dtype": "fp16",
+ "cases": [
+  {
+   "case_id": "be31c962faaa70ae",
+   "case_index": 0,
+   "params": {
+    "N": 256
+   },
+   "problem_size": 65536
+  },
+  {
+   "case_id": "02d18e05f5466a56",
+   "case_index": 4,
+   "params": {
+    "N": 512
+   },
+   "problem_size": 262144
+  },
+  {
+   "case_id": "5cdffc943eaaf0f5",
+   "case_index": 8,
+   "params": {
+    "N": 768
+   },
+   "problem_size": 589824
+  },
+  {
+   "case_id": "7b6a210268480fd7",
+   "case_index": 12,
+   "params": {
+    "N": 1024
+   },
+   "problem_size": 1048576
+  },
+  {
+   "case_id": "e728bd9faa6d5309",
+   "case_index": 16,
+   "params": {
+    "N": 1280
+   },
+   "problem_size": 1638400
+  },
+  {
+   "case_id": "f31154d9a564887f",
+   "case_index": 20,
+   "params": {
+    "N": 1536
+   },
+   "problem_size": 2359296
+  },
+  {
+   "case_id": "944ea62c120981e3",
+   "case_index": 24,
+   "params": {
+    "N": 1792
+   },
+   "problem_size": 3211264
+  },
+  {
+   "case_id": "ec114c57c56e0324",
+   "case_index": 28,
+   "params": {
+    "N": 2048
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "41300ddd675d3420",
+   "case_index": 32,
+   "params": {
+    "N": 2304
+   },
+   "problem_size": 5308416
+  },
+  {
+   "case_id": "8eea332f9f3f4ce6",
+   "case_index": 36,
+   "params": {
+    "N": 2560
+   },
+   "problem_size": 6553600
+  },
+  {
+   "case_id": "9f0a729f1aabd9b7",
+   "case_index": 40,
+   "params": {
+    "N": 2816
+   },
+   "problem_size": 7929856
+  },
+  {
+   "case_id": "db71a3f3d1af62cd",
+   "case_index": 44,
+   "params": {
+    "N": 3072
+   },
+   "problem_size": 9437184
+  },
+  {
+   "case_id": "09ca81d314156bce",
+   "case_index": 48,
+   "params": {
+    "N": 3328
+   },
+   "problem_size": 11075584
+  },
+  {
+   "case_id": "b7befb838c104149",
+   "case_index": 52,
+   "params": {
+    "N": 3584
+   },
+   "problem_size": 12845056
+  },
+  {
+   "case_id": "101846d6061f606a",
+   "case_index": 56,
+   "params": {
+    "N": 3840
+   },
+   "problem_size": 14745600
+  },
+  {
+   "case_id": "470188ba026058f1",
+   "case_index": 60,
+   "params": {
+    "N": 4096
+   },
+   "problem_size": 16777216
+  },
+  {
+   "case_id": "0a81f20dcf97f8ad",
+   "case_index": 64,
+   "params": {
+    "N": 4352
+   },
+   "problem_size": 18939904
+  },
+  {
+   "case_id": "2a72535b81714921",
+   "case_index": 68,
+   "params": {
+    "N": 4608
+   },
+   "problem_size": 21233664
+  },
+  {
+   "case_id": "b04271916214295f",
+   "case_index": 72,
+   "params": {
+    "N": 4864
+   },
+   "problem_size": 23658496
+  },
+  {
+   "case_id": "408b5fedc0c8c8aa",
+   "case_index": 76,
+   "params": {
+    "N": 5120
+   },
+   "problem_size": 26214400
+  }
+ ],
+ "dsl": "nki",
+ "device": "Trn2",
+ "arch": "trainium2",
+ "source_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_copy_2_1_fnwn5ifs/impl_nki.py",
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/matrix_copy_2_1_fnwn5ifs",
+ "atol": 0.001,
+ "rtol": 0.001,
+ "tolerance_source": "config.verify+dtype_default",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "matrix_copy",
+  "contract_revision": 2,
+  "required_stages": [
+   {
+    "id": "allocate_output",
+    "description": "Allocate a fresh (N, N) output of A's dtype inside run()."
+   },
+   {
+    "id": "stream_copy",
+    "description": "One logical pass (any split across programs or launches, no global intermediate) that reads every element of A once and writes it unchanged to the same position of the output, with edge handling wherever the fixed N*N (or N, for 2-D tiles) is not a multiple of the chosen tile."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "torch\\.clone\\(|\\.clone\\(\\)|\\.copy_\\(|torch\\.Tensor\\.to\\(|copy\\s*=\\s*True",
+    "message": "The copy must be performed by the kernel, not by a PyTorch clone/copy.",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "return\\s+A\\b|return\\s+A\\.view|return\\s+A\\.reshape|return\\s+A\\.contiguous",
+    "message": "Returning the input or a view of it violates the fresh-output requirement.",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\bA\\s*\\+\\s*0\\b|\\bA\\s*\\*\\s*1\\b|torch\\.add\\(|torch\\.mul\\(",
+    "message": "Host-side arithmetic identity on the input replaces the whole computation.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)",
+    "message": "No dtype conversion is allowed anywhere in matrix_copy.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(",
+    "message": "No initialised scratch buffer is part of this operator; only torch.empty / torch.empty_like are expected.",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "tl\\.store",
+     "ct\\.store",
+     "store_offset",
+     "T\\.copy",
+     "nl\\.store",
+     "nisa\\.dma_copy"
+    ],
+    "message": "No kernel-level store found; the copy must be done by a kernel.",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.load",
+     "ct\\.load",
+     "load_offset",
+     "get_raw_memory",
+     "T\\.copy",
+     "nl\\.load",
+     "nisa\\.dma_copy"
+    ],
+    "message": "No kernel-level load found.",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty",
+   "torch.empty_like",
+   "torch.cuda.current_stream",
+   "Tensor.view",
+   "Tensor.reshape",
+   "Tensor.contiguous",
+   "Tensor.numel",
+   "Tensor.stride"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none; the returned (N, N) tensor must be freshly allocated inside run() and must not share storage with A"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, optional metadata-only flatten views, metadata reads, Python) is not GPU time. No cached state, no prepacking outside run(), no host-side copies."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "timing_error",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "eager",
+ "seed": 1205790450,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "7f04ebea03251d728a07",
+  "round": 2,
+  "attempt": 1
+ }
+}

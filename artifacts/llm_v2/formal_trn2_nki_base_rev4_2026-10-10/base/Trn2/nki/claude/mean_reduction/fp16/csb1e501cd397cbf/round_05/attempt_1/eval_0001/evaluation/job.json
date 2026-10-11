@@ -1,0 +1,320 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/2",
+ "operator": "mean_reduction",
+ "dtype": "fp16",
+ "cases": [
+  {
+   "case_id": "fb64c8e41915f675",
+   "case_index": 0,
+   "params": {
+    "M": 2048,
+    "N": 1024
+   },
+   "problem_size": 2097152
+  },
+  {
+   "case_id": "c6e0830269b531f3",
+   "case_index": 3,
+   "params": {
+    "M": 2048,
+    "N": 2048
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "26498301b22f4173",
+   "case_index": 6,
+   "params": {
+    "M": 2048,
+    "N": 3072
+   },
+   "problem_size": 6291456
+  },
+  {
+   "case_id": "c52a37f4dc10c552",
+   "case_index": 9,
+   "params": {
+    "M": 2048,
+    "N": 4096
+   },
+   "problem_size": 8388608
+  },
+  {
+   "case_id": "7c6396e326270188",
+   "case_index": 12,
+   "params": {
+    "M": 2048,
+    "N": 5120
+   },
+   "problem_size": 10485760
+  },
+  {
+   "case_id": "87779fade68ef007",
+   "case_index": 15,
+   "params": {
+    "M": 2048,
+    "N": 6144
+   },
+   "problem_size": 12582912
+  },
+  {
+   "case_id": "6e489870550a7f84",
+   "case_index": 18,
+   "params": {
+    "M": 2048,
+    "N": 7168
+   },
+   "problem_size": 14680064
+  },
+  {
+   "case_id": "0346965bd670c429",
+   "case_index": 21,
+   "params": {
+    "M": 2048,
+    "N": 8192
+   },
+   "problem_size": 16777216
+  },
+  {
+   "case_id": "a831cce29db726ea",
+   "case_index": 24,
+   "params": {
+    "M": 2048,
+    "N": 9216
+   },
+   "problem_size": 18874368
+  },
+  {
+   "case_id": "ec1a8d76f55df54f",
+   "case_index": 27,
+   "params": {
+    "M": 2048,
+    "N": 10240
+   },
+   "problem_size": 20971520
+  },
+  {
+   "case_id": "36d4be621c7ef5fe",
+   "case_index": 30,
+   "params": {
+    "M": 2048,
+    "N": 11264
+   },
+   "problem_size": 23068672
+  },
+  {
+   "case_id": "6dab933155deaae9",
+   "case_index": 33,
+   "params": {
+    "M": 2048,
+    "N": 12288
+   },
+   "problem_size": 25165824
+  },
+  {
+   "case_id": "9d38b93b3f9763a8",
+   "case_index": 36,
+   "params": {
+    "M": 2048,
+    "N": 13312
+   },
+   "problem_size": 27262976
+  },
+  {
+   "case_id": "811ecf2c419e08de",
+   "case_index": 39,
+   "params": {
+    "M": 2048,
+    "N": 14336
+   },
+   "problem_size": 29360128
+  },
+  {
+   "case_id": "82f5ba04d3357c05",
+   "case_index": 42,
+   "params": {
+    "M": 2048,
+    "N": 15360
+   },
+   "problem_size": 31457280
+  },
+  {
+   "case_id": "10acaf8f7f58de7b",
+   "case_index": 45,
+   "params": {
+    "M": 2048,
+    "N": 16384
+   },
+   "problem_size": 33554432
+  },
+  {
+   "case_id": "3774fc59ad8b28d1",
+   "case_index": 48,
+   "params": {
+    "M": 2048,
+    "N": 17408
+   },
+   "problem_size": 35651584
+  },
+  {
+   "case_id": "f6a355ec4847aaad",
+   "case_index": 51,
+   "params": {
+    "M": 2048,
+    "N": 18432
+   },
+   "problem_size": 37748736
+  },
+  {
+   "case_id": "2b458f36a02e18a5",
+   "case_index": 54,
+   "params": {
+    "M": 2048,
+    "N": 19456
+   },
+   "problem_size": 39845888
+  },
+  {
+   "case_id": "cdea6f036001dd8d",
+   "case_index": 57,
+   "params": {
+    "M": 2048,
+    "N": 20480
+   },
+   "problem_size": 41943040
+  }
+ ],
+ "dsl": "nki",
+ "device": "Trn2",
+ "arch": "trainium2",
+ "source_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/mean_reduction_5_1_438sdm87/impl_nki.py",
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/mean_reduction_5_1_438sdm87",
+ "atol": 0.001,
+ "rtol": 0.001,
+ "tolerance_source": "config.verify+dtype_default",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "mean_reduction",
+  "contract_revision": 2,
+  "required_stages": [
+   {
+    "id": "allocate_output",
+    "description": "Allocate a float32 output of M elements (or an (M, 1) buffer later viewed as (M,)) inside run()."
+   },
+   {
+    "id": "rowwise_fp32_sum",
+    "description": "Single logical traversal of x in which every element is converted to float32 and accumulated into float32 partial sums that are combined into one float32 total per row; masked/padded columns contribute exactly 0."
+   },
+   {
+    "id": "normalise_store",
+    "description": "Divide each row total by the exact N in float32 (or multiply by a float32 reciprocal) and store one float32 per row; fused with the sum, or applied by a combine that sums the per-call float32 partials of a split-row design (the combine must not re-read x)."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "torch\\.mean\\(|\\.mean\\(|torch\\.nanmean|\\.nanmean\\(",
+    "message": "The mean must be computed by the kernel, not by PyTorch.",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.sum\\(|(?<!tl)(?<!ct)(?<!nl)\\.sum\\(|torch\\.einsum|torch\\.matmul|torch\\.mv\\(|\\s@\\s",
+    "message": "Host-side row sums (sum/einsum/matmul with a ones vector) replace the reduction stage.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.cumsum|torch\\.logsumexp|torch\\.add\\(",
+    "message": "Host-side arithmetic on x inside run() is not part of this operator.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.float\\(\\)|\\.to\\(\\s*torch\\.float32\\s*\\)|\\.to\\(\\s*dtype\\s*=\\s*torch\\.float32",
+    "message": "Casting x to float32 with PyTorch inside run() is an extra pass over x (counted device work that the canonical algorithm does not have); the conversion must happen inside the kernel.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "dtype\\s*=\\s*(tl|ct|T|nl)\\.(float16|bfloat16|fp16|bf16)",
+    "message": "A float16/bfloat16 accumulator violates the float32 accumulation requirement.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(",
+    "message": "An initialised global scratch is not part of the canonical algorithm; the only permitted scratch is a per-call partial-sum buffer of a split-row design, whose fill is counted device work.",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "tl\\.sum",
+     "ct\\.sum",
+     "T\\.reduce_sum",
+     "nl\\.sum",
+     "nisa\\.tensor_reduce",
+     "reduce_sum",
+     "reduce"
+    ],
+    "message": "No kernel-level sum reduction found.",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "float32",
+     "fp32",
+     "f32"
+    ],
+    "message": "No evidence of a float32 accumulator or cast inside the kernel.",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty",
+   "torch.float32",
+   "torch.cuda.current_stream",
+   "Tensor.contiguous",
+   "Tensor.squeeze",
+   "Tensor.view",
+   "Tensor.reshape",
+   "Tensor.stride",
+   "Tensor.numel"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none with respect to x; the returned (M,) float32 tensor may be a metadata-only view of a buffer allocated inside run()"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "Measured: GPU time of all device work run() causes (the reduction kernel); the output allocation call, an optional no-op contiguous() guard and an optional metadata-only squeeze/view are host work, not GPU time. No cached state, no host-side cast or copy of x; a per-call partial-sum buffer of a split-row design (and any device fill of it) is device work and is counted; no cross-call cache of it."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "timing_error",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "eager",
+ "seed": 19336336,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "e13ceb014f370a4588af",
+  "round": 5,
+  "attempt": 1
+ }
+}

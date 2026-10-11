@@ -1,0 +1,436 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "compile_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791693702.0287092,
+   "ok": true,
+   "elapsed_s": 0.0027544498443603516
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 407, in run_case\n    sync()\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/neuron.py\", line 307, in synchronize\n    torch_neuronx.synchronize(device)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/__init__.py\", line 596, in synchronize\n    _C._neuron_synchronize(device_index)\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1548, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\nRuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global;\nerror message=\"COMPILATION FAILED: [INTERNAL_ERROR] [NCC_IINAR001] [unassigned.crzke] ISA validation failed: inst failed assertion check: 'opcode_engine_check'\nnote: see current operation: \"nir.TensorScalarArithOp\"() <{accumulator_cmd = 0 : i32, dep_handle, dst_mem_pattern = {dtype = 10 : i8, kind = \"simple\", num_elem = [1024 : i16, 1 : i16, 1 : i16, 1 : i16], start_addr = {kind = \"sym\", offset = 0 : i32, symbol = @\"inst__I-4-0:_mem_4_4_sg0000\"}, step_elem = [1 : i16, 1 : i16, 1 : i16, 1 : i16]}, engine = \"Pool0\", events = {semaphore_value = {kind = \"imm\", value = 16 : i32}, update_idx = 3 : i8, update_mode = \"SemInc_Complete\", wait_idx = 8 : i8, wait_mode = \"WaitForSem_GE_imm\"}, header = {debug_cmd = 0 : i8, debug_hint = 0 : i8}, imm0 = {bits = 0 : i32, dtype = 10 : i8, kind = \"inline\"}, imm1 = {bits = 0 : i32, dtype = 0 : i8, kind = \"inline\"}, num_active_channels = -128 : i8, op0 = 21 : i32, op1 = 0 : i32, reverse_operands = 0 : i32, src_mem_pattern = {dtype = 10 : i8, kind = \"simple\", num_elem = [1024 : i16, 1 : i16, 1 : i16, 1 : i16], start_addr = {kind = \"sym\", offset = 0 : i32, symbol = @\"inst__I-4-0:_mem_1_1_sg0000\"}, step_elem = [1 : i16, 1 : i16, 1 : i16, 1 : i16]}}> : () -> () - \"\nneff cache key=nki_73__kl_divergence_3a2827006aad5a15_(('column_chunks', 1),)_[2]_((torch.Size([512, 1024]), torch.float32), (torch.Size([512, 1024]), torch.float32)):bafa76eb59bdb7612a8b38ea274ab3ef471dee3075a75d950eb0f9b871f2ce4c\nNote: Neuron errors are reported asynchronously. The Python traceback shows where the\nerror was detected (synchronization point), not necessarily where the failing operation\nwas dispatched. For synchronous error reporting, set NEURON_LAUNCH_BLOCKING=1.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "4994db1385bd2ef296b9",
+  "round": 5,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "74326032a22896b4",
+   "case_index": 0,
+   "params": {
+    "rows": 512,
+    "cols": 1024
+   },
+   "problem_size": 524288,
+   "status": "compile_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 407, in run_case\n    sync()\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/neuron.py\", line 307, in synchronize\n    torch_neuronx.synchronize(device)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/__init__.py\", line 596, in synchronize\n    _C._neuron_synchronize(device_index)\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1548, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\nRuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global;\nerror message=\"COMPILATION FAILED: [INTERNAL_ERROR] [NCC_IINAR001] [unassigned.crzke] ISA validation failed: inst failed assertion check: 'opcode_engine_check'\nnote: see current operation: \"nir.TensorScalarArithOp\"() <{accumulator_cmd = 0 : i32, dep_handle, dst_mem_pattern = {dtype = 10 : i8, kind = \"simple\", num_elem = [1024 : i16, 1 : i16, 1 : i16, 1 : i16], start_addr = {kind = \"sym\", offset = 0 : i32, symbol = @\"inst__I-4-0:_mem_4_4_sg0000\"}, step_elem = [1 : i16, 1 : i16, 1 : i16, 1 : i16]}, engine = \"Pool0\", events = {semaphore_value = {kind = \"imm\", value = 16 : i32}, update_idx = 3 : i8, update_mode = \"SemInc_Complete\", wait_idx = 8 : i8, wait_mode = \"WaitForSem_GE_imm\"}, header = {debug_cmd = 0 : i8, debug_hint = 0 : i8}, imm0 = {bits = 0 : i32, dtype = 10 : i8, kind = \"inline\"}, imm1 = {bits = 0 : i32, dtype = 0 : i8, kind = \"inline\"}, num_active_channels = -128 : i8, op0 = 21 : i32, op1 = 0 : i32, reverse_operands = 0 : i32, src_mem_pattern = {dtype = 10 : i8, kind = \"simple\", num_elem = [1024 : i16, 1 : i16, 1 : i16, 1 : i16], start_addr = {kind = \"sym\", offset = 0 : i32, symbol = @\"inst__I-4-0:_mem_1_1_sg0000\"}, step_elem = [1 : i16, 1 : i16, 1 : i16, 1 : i16]}}> : () -> () - \"\nneff cache key=nki_73__kl_divergence_3a2827006aad5a15_(('column_chunks', 1),)_[2]_((torch.Size([512, 1024]), torch.float32), (torch.Size([512, 1024]), torch.float32)):bafa76eb59bdb7612a8b38ea274ab3ef471dee3075a75d950eb0f9b871f2ce4c\nNote: Neuron errors are reported asynchronously. The Python traceback shows where the\nerror was detected (synchronization point), not necessarily where the failing operation\nwas dispatched. For synchronous error reporting, set NEURON_LAUNCH_BLOCKING=1.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791693702.0321078,
+     "ok": false
+    }
+   },
+   "elapsed_s": 3.008809804916382,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "224a0e2d36f0a68f",
+   "case_index": 1,
+   "params": {
+    "rows": 512,
+    "cols": 2048
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "17f25d493507dee9",
+   "case_index": 2,
+   "params": {
+    "rows": 512,
+    "cols": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "dcc51dc07bfec78b",
+   "case_index": 3,
+   "params": {
+    "rows": 512,
+    "cols": 8192
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "d157734853593819",
+   "case_index": 4,
+   "params": {
+    "rows": 512,
+    "cols": 16384
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "2fd08477b1e0a67c",
+   "case_index": 5,
+   "params": {
+    "rows": 1024,
+    "cols": 1024
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "eaefacc7a781db51",
+   "case_index": 6,
+   "params": {
+    "rows": 1024,
+    "cols": 2048
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "a84b71ec021ab47b",
+   "case_index": 7,
+   "params": {
+    "rows": 1024,
+    "cols": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "c8c2ddced500ebaa",
+   "case_index": 8,
+   "params": {
+    "rows": 1024,
+    "cols": 8192
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "caef04e2e9f0b048",
+   "case_index": 9,
+   "params": {
+    "rows": 1024,
+    "cols": 16384
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "7c03327cca298cea",
+   "case_index": 10,
+   "params": {
+    "rows": 2048,
+    "cols": 1024
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "8abecbb1cd67d9d6",
+   "case_index": 11,
+   "params": {
+    "rows": 2048,
+    "cols": 2048
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "4767ee391e7ef338",
+   "case_index": 12,
+   "params": {
+    "rows": 2048,
+    "cols": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "e54ae4d9b05d7725",
+   "case_index": 13,
+   "params": {
+    "rows": 2048,
+    "cols": 8192
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "9f9a2b13ab4aeb03",
+   "case_index": 14,
+   "params": {
+    "rows": 2048,
+    "cols": 16384
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "cffa8801fafc049c",
+   "case_index": 15,
+   "params": {
+    "rows": 4096,
+    "cols": 1024
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "e6a338b800db441a",
+   "case_index": 16,
+   "params": {
+    "rows": 4096,
+    "cols": 2048
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "d5c3ffa8c5e35825",
+   "case_index": 17,
+   "params": {
+    "rows": 4096,
+    "cols": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "924a84bb78ae493c",
+   "case_index": 18,
+   "params": {
+    "rows": 4096,
+    "cols": 8192
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  },
+  {
+   "case_id": "ffa13bd6ddc54a48",
+   "case_index": 19,
+   "params": {
+    "rows": 4096,
+    "cols": 16384
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 1 (compile_error)"
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 1,
+ "valid_cases": 0,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "74326032a22896b4",
+  "case_index": 0,
+  "params": {
+   "rows": 512,
+   "cols": 1024
+  },
+  "status": "compile_error"
+ },
+ "suite_stopped": {
+  "reason": "compile_error",
+  "at_case": "74326032a22896b4",
+  "position": 0
+ },
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 2,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [],
+ "timing_mode_differs": false,
+ "elapsed_s": 10.295112609863281,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "792502272",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "792977408",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 409540772,
+ "worker_rc": 0,
+ "worker_wall_s": 11.41335153579712,
+ "device_lock_wait_s": 122.67432713508606,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/kl_divergence_5_1_lzbvi5f2"
+}

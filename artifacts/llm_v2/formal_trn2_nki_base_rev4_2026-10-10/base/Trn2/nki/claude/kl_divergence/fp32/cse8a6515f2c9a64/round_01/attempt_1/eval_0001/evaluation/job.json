@@ -1,0 +1,310 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/2",
+ "operator": "kl_divergence",
+ "dtype": "fp32",
+ "cases": [
+  {
+   "case_id": "74326032a22896b4",
+   "case_index": 0,
+   "params": {
+    "rows": 512,
+    "cols": 1024
+   },
+   "problem_size": 524288
+  },
+  {
+   "case_id": "224a0e2d36f0a68f",
+   "case_index": 1,
+   "params": {
+    "rows": 512,
+    "cols": 2048
+   },
+   "problem_size": 1048576
+  },
+  {
+   "case_id": "17f25d493507dee9",
+   "case_index": 2,
+   "params": {
+    "rows": 512,
+    "cols": 4096
+   },
+   "problem_size": 2097152
+  },
+  {
+   "case_id": "dcc51dc07bfec78b",
+   "case_index": 3,
+   "params": {
+    "rows": 512,
+    "cols": 8192
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "d157734853593819",
+   "case_index": 4,
+   "params": {
+    "rows": 512,
+    "cols": 16384
+   },
+   "problem_size": 8388608
+  },
+  {
+   "case_id": "2fd08477b1e0a67c",
+   "case_index": 5,
+   "params": {
+    "rows": 1024,
+    "cols": 1024
+   },
+   "problem_size": 1048576
+  },
+  {
+   "case_id": "eaefacc7a781db51",
+   "case_index": 6,
+   "params": {
+    "rows": 1024,
+    "cols": 2048
+   },
+   "problem_size": 2097152
+  },
+  {
+   "case_id": "a84b71ec021ab47b",
+   "case_index": 7,
+   "params": {
+    "rows": 1024,
+    "cols": 4096
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "c8c2ddced500ebaa",
+   "case_index": 8,
+   "params": {
+    "rows": 1024,
+    "cols": 8192
+   },
+   "problem_size": 8388608
+  },
+  {
+   "case_id": "caef04e2e9f0b048",
+   "case_index": 9,
+   "params": {
+    "rows": 1024,
+    "cols": 16384
+   },
+   "problem_size": 16777216
+  },
+  {
+   "case_id": "7c03327cca298cea",
+   "case_index": 10,
+   "params": {
+    "rows": 2048,
+    "cols": 1024
+   },
+   "problem_size": 2097152
+  },
+  {
+   "case_id": "8abecbb1cd67d9d6",
+   "case_index": 11,
+   "params": {
+    "rows": 2048,
+    "cols": 2048
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "4767ee391e7ef338",
+   "case_index": 12,
+   "params": {
+    "rows": 2048,
+    "cols": 4096
+   },
+   "problem_size": 8388608
+  },
+  {
+   "case_id": "e54ae4d9b05d7725",
+   "case_index": 13,
+   "params": {
+    "rows": 2048,
+    "cols": 8192
+   },
+   "problem_size": 16777216
+  },
+  {
+   "case_id": "9f9a2b13ab4aeb03",
+   "case_index": 14,
+   "params": {
+    "rows": 2048,
+    "cols": 16384
+   },
+   "problem_size": 33554432
+  },
+  {
+   "case_id": "cffa8801fafc049c",
+   "case_index": 15,
+   "params": {
+    "rows": 4096,
+    "cols": 1024
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "e6a338b800db441a",
+   "case_index": 16,
+   "params": {
+    "rows": 4096,
+    "cols": 2048
+   },
+   "problem_size": 8388608
+  },
+  {
+   "case_id": "d5c3ffa8c5e35825",
+   "case_index": 17,
+   "params": {
+    "rows": 4096,
+    "cols": 4096
+   },
+   "problem_size": 16777216
+  },
+  {
+   "case_id": "924a84bb78ae493c",
+   "case_index": 18,
+   "params": {
+    "rows": 4096,
+    "cols": 8192
+   },
+   "problem_size": 33554432
+  },
+  {
+   "case_id": "ffa13bd6ddc54a48",
+   "case_index": 19,
+   "params": {
+    "rows": 4096,
+    "cols": 16384
+   },
+   "problem_size": 67108864
+  }
+ ],
+ "dsl": "nki",
+ "device": "Trn2",
+ "arch": "trainium2",
+ "source_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/kl_divergence_1_1_r0vr5f28/impl_nki.py",
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/kl_divergence_1_1_r0vr5f28",
+ "atol": 0.0001,
+ "rtol": 0.0001,
+ "tolerance_source": "config.verify",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "kl_divergence",
+  "contract_revision": 2,
+  "required_stages": [
+   {
+    "id": "output_alloc",
+    "description": "Allocate the (rows,) fp32 LOSS inside run()."
+   },
+   {
+    "id": "row_map_reduce",
+    "description": "Per row: fp32 term y*(guarded_log(y) - log_p) accumulated over all columns, one scalar written per row."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "torch\\.(nn\\.functional\\.)?kl_div\\(|F\\.kl_div\\(",
+    "message": "library KL divergence computes the operator",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.xlogy\\(",
+    "message": "torch.xlogy computes the elementwise term in PyTorch",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.log\\(|torch\\.sum\\(|\\.sum\\(\\s*(dim|-1|1)",
+    "message": "PyTorch log or row reduction on the data path",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.where\\(",
+    "message": "PyTorch select on the data path (guard must be in the kernel)",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "tl\\.sum",
+     "ct\\.sum",
+     "T\\.reduce_sum",
+     "nl\\.sum",
+     "nisa\\.tensor_reduce",
+     "reduce"
+    ],
+    "message": "a device-side row reduction",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.log",
+     "ct\\.log",
+     "T\\.log",
+     "nl\\.log",
+     "log\\("
+    ],
+    "message": "a device-side logarithm",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.where",
+     "ct\\.where",
+     "T\\.if_then_else",
+     "nl\\.where",
+     "where\\(",
+     ">\\s*0"
+    ],
+    "message": "a guard for non-positive probabilities",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty",
+   "torch.cuda.current_stream"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none: fresh (rows,) fp32 tensor allocated inside run()"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "Measured: GPU time of all device work run() causes (the row map-reduce kernel(s), including any device fill of split-row scratch); shape reads and the LOSS allocation call are host work, not GPU time. No casts, copies or cross-call caches."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "timing_error",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "eager",
+ "seed": 189918027,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "066084a3bc3b8aebbc43",
+  "round": 1,
+  "attempt": 1
+ }
+}

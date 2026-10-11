@@ -1,0 +1,85 @@
+{
+ "verdict": "audit_only",
+ "static": {
+  "verdict": "audit_only",
+  "evidence": [
+   {
+    "level": "audit",
+    "category": "io",
+    "message": "import of 'os' (environment/path access)",
+    "line": 1,
+    "scope": "host",
+    "matched": null
+   }
+  ],
+  "kernel_line_count": 117,
+  "aliases": {
+   "os": "os",
+   "torch": "torch",
+   "nki": "nki",
+   "nl": "nki.language",
+   "nisa": "nki.isa"
+  }
+ },
+ "contract_evidence": [
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "The @ operator on tensors performs the GEMM in PyTorch. [audit only: match spans a line break (the rule is a single-statement pattern)]",
+   "line": 120,
+   "scope": "host",
+   "matched": ")\n\n\n@n"
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "missing evidence: No atomic-add fixup found; the Stream-K region must combine segments with fp32 atomic adds into the zeroed accumulator. [audit only: a missing pattern is not evidence of a violation]",
+   "line": null,
+   "scope": null,
+   "matched": null
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "missing evidence: No per-call zero-fill of the fp32 accumulation target found. [audit only: a missing pattern is not evidence of a violation]",
+   "line": null,
+   "scope": null,
+   "matched": null
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "missing evidence: No SM-count query found; the Stream-K partition must derive from the device's SM count. [audit only: a missing pattern is not evidence of a violation]",
+   "line": null,
+   "scope": null,
+   "matched": null
+  },
+  {
+   "level": "audit",
+   "category": "rule",
+   "message": "missing evidence: No TF32 evidence for fp32 operands. [audit only: a missing pattern is not evidence of a violation]",
+   "line": null,
+   "scope": null,
+   "matched": null
+  }
+ ],
+ "review_items": [],
+ "audit_flags": [
+  "line 1 [host]: import of 'os' (environment/path access)",
+  "line 120 [host]: The @ operator on tensors performs the GEMM in PyTorch. [audit only: match spans a line break (the rule is a single-statement pattern)]",
+  "missing evidence: No atomic-add fixup found; the Stream-K region must combine segments with fp32 atomic adds into the zeroed accumulator. [audit only: a missing pattern is not evidence of a violation]",
+  "missing evidence: No per-call zero-fill of the fp32 accumulation target found. [audit only: a missing pattern is not evidence of a violation]",
+  "missing evidence: No SM-count query found; the Stream-K partition must derive from the device's SM count. [audit only: a missing pattern is not evidence of a violation]",
+  "missing evidence: No TF32 evidence for fp32 operands. [audit only: a missing pattern is not evidence of a violation]"
+ ],
+ "checker_version": "contract_checks/2026-10-07.v4",
+ "diagnostics": [],
+ "candidate_sha256": "2f26ce18714ccf79dfeb875bedfe91d7f6227fd6c5bcc2fd1b7d1234f25c8909",
+ "checker": {
+  "checker_version": "contract_checks/2026-10-07.v4",
+  "checker_sources_sha256": "b797d8c10065d3874853ff5b7b31a08d35da8da76c6a56c1b0d1b574da2a12e9"
+ },
+ "rules_sha256": "649d1a2f303b6ef9b3174debcbc11e37923aa717daea00ee9fac468f2863050a",
+ "checked_at": 1791677581.6381547,
+ "executor": "claude-code (Trn2 NKI Base)"
+}

@@ -1,0 +1,291 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/2",
+ "operator": "vector_add",
+ "dtype": "fp16",
+ "cases": [
+  {
+   "case_id": "5ac14b1b1b7bcea5",
+   "case_index": 0,
+   "params": {
+    "n": 1048576
+   },
+   "problem_size": 1048576
+  },
+  {
+   "case_id": "d6d640085214ce5c",
+   "case_index": 4,
+   "params": {
+    "n": 2097152
+   },
+   "problem_size": 2097152
+  },
+  {
+   "case_id": "50fb0f1799bb1d33",
+   "case_index": 8,
+   "params": {
+    "n": 3145728
+   },
+   "problem_size": 3145728
+  },
+  {
+   "case_id": "2575fda9938a31c8",
+   "case_index": 12,
+   "params": {
+    "n": 4194304
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "e98f54076c7e0516",
+   "case_index": 16,
+   "params": {
+    "n": 5242880
+   },
+   "problem_size": 5242880
+  },
+  {
+   "case_id": "d158194ba0673504",
+   "case_index": 20,
+   "params": {
+    "n": 6291456
+   },
+   "problem_size": 6291456
+  },
+  {
+   "case_id": "933d29d79b36f5cb",
+   "case_index": 24,
+   "params": {
+    "n": 7340032
+   },
+   "problem_size": 7340032
+  },
+  {
+   "case_id": "9bf9e9a225c37e44",
+   "case_index": 28,
+   "params": {
+    "n": 8388608
+   },
+   "problem_size": 8388608
+  },
+  {
+   "case_id": "3155b6e48f3d469e",
+   "case_index": 32,
+   "params": {
+    "n": 9437184
+   },
+   "problem_size": 9437184
+  },
+  {
+   "case_id": "43156f027b71a90a",
+   "case_index": 36,
+   "params": {
+    "n": 10485760
+   },
+   "problem_size": 10485760
+  },
+  {
+   "case_id": "aece4997c5f0a5ec",
+   "case_index": 40,
+   "params": {
+    "n": 11534336
+   },
+   "problem_size": 11534336
+  },
+  {
+   "case_id": "5067f671c6908b2d",
+   "case_index": 44,
+   "params": {
+    "n": 12582912
+   },
+   "problem_size": 12582912
+  },
+  {
+   "case_id": "3099d75f5e004cd4",
+   "case_index": 48,
+   "params": {
+    "n": 13631488
+   },
+   "problem_size": 13631488
+  },
+  {
+   "case_id": "65eb6fa184ad3b8f",
+   "case_index": 52,
+   "params": {
+    "n": 14680064
+   },
+   "problem_size": 14680064
+  },
+  {
+   "case_id": "8a9754406a77d25c",
+   "case_index": 56,
+   "params": {
+    "n": 15728640
+   },
+   "problem_size": 15728640
+  },
+  {
+   "case_id": "7efb1a40eb9d413a",
+   "case_index": 60,
+   "params": {
+    "n": 16777216
+   },
+   "problem_size": 16777216
+  },
+  {
+   "case_id": "264a9c0cd008c720",
+   "case_index": 64,
+   "params": {
+    "n": 17825792
+   },
+   "problem_size": 17825792
+  },
+  {
+   "case_id": "92f9dd209998643b",
+   "case_index": 68,
+   "params": {
+    "n": 18874368
+   },
+   "problem_size": 18874368
+  },
+  {
+   "case_id": "9d000d2a7091619a",
+   "case_index": 72,
+   "params": {
+    "n": 19922944
+   },
+   "problem_size": 19922944
+  },
+  {
+   "case_id": "7b693d62eac59dba",
+   "case_index": 76,
+   "params": {
+    "n": 20971520
+   },
+   "problem_size": 20971520
+  }
+ ],
+ "dsl": "nki",
+ "device": "Trn2",
+ "arch": "trainium2",
+ "source_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/vector_add_5_1_oa_l08_3/impl_nki.py",
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/vector_add_5_1_oa_l08_3",
+ "atol": 0.001,
+ "rtol": 0.001,
+ "tolerance_source": "config.verify+dtype_default",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "vector_add",
+  "contract_revision": 2,
+  "required_stages": [
+   {
+    "id": "allocate_output",
+    "description": "Allocate a fresh output of x's shape and dtype inside run()."
+   },
+   {
+    "id": "elementwise_add",
+    "description": "One logical pass over exactly n elements (any split across programs or launches, no global intermediate): load x and y, add in the native dtype (or a wider type cast back once), store with edge handling wherever n is not a multiple of the chosen tile."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "torch\\.add\\(|(?<!tl)(?<!ct)(?<!nl)\\.add\\(|\\.add_\\(|\\+=",
+    "message": "A PyTorch add on the host (or in-place accumulation into an input) replaces the kernel.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "return\\s+(x\\s*\\+\\s*y|y\\s*\\+\\s*x)\\b|\\b(output|out|result|res|z)\\s*=\\s*(x\\s*\\+\\s*y|y\\s*\\+\\s*x)\\b|\\.copy_\\(\\s*(x\\s*\\+\\s*y|y\\s*\\+\\s*x)",
+    "message": "The whole operator is performed by the PyTorch + operator on the input tensors.",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "return\\s+(x|y)\\b|return\\s+(x|y)\\.|\\b(x|y)\\.copy_\\(|\\b(x|y)\\[.*\\]\\s*=",
+    "message": "Writing into or returning an input violates the fresh-output / no-mutation rules.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.(to|astype)\\(\\s*(torch|tl|ct|T|nl)?\\.?(float32|float16|bfloat16|int32|int8|half|bf16|fp16|fp32)\\b",
+    "message": "A dtype conversion; permitted only as a widen-then-cast-back that reproduces the native-dtype result (exact for int8).",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)",
+    "message": "Host round-trip of the data.",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "tl\\.store",
+     "ct\\.store",
+     "store_offset",
+     "T\\.copy",
+     "nl\\.store",
+     "nisa\\.dma_copy"
+    ],
+    "message": "No kernel-level store found; the add must be done by a kernel.",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.load",
+     "ct\\.load",
+     "load_offset",
+     "get_raw_memory",
+     "T\\.copy",
+     "nl\\.load",
+     "nisa\\.dma_copy"
+    ],
+    "message": "No kernel-level load found.",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty_like",
+   "torch.empty",
+   "torch.cuda.current_stream",
+   "Tensor.contiguous",
+   "Tensor.view",
+   "Tensor.numel",
+   "Tensor.stride"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none; the returned tensor must be freshly allocated inside run() with x's shape and dtype and must not share storage with x or y"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, metadata reads, Python) is not GPU time. No cached state, no copy or cast of the inputs, no second logical pass."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "timing_error",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "eager",
+ "seed": 1693283603,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "ff0cf9275b6e490a7860",
+  "round": 5,
+  "attempt": 1
+ }
+}

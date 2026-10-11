@@ -1,0 +1,3764 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "runtime_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791671114.4688034,
+   "ok": true,
+   "elapsed_s": 0.005231380462646484
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py\", line 404, in run\n    _pad_sort_kernel[2](data, work, L, _CH)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('CH', 8192), ('L', 21)):g2|[1500000]:Half:S(C)|[2097152]:Half:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:397:14: error: 'nisa.memset' op Expected 'dst' partition start in {0} for a 96-partition access, but got 32.\n    result = get_backend().memset(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:208:13: note: called from\n            nisa.memset(dst=h0[pa:P, c0:c1], value=_INF)\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:178:1: note: called from\ndef _pad_sort_kernel(data, work, L, CH):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py(404): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "c16c187a549f090048b7",
+  "round": 4,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "24982e555533421b",
+   "case_index": 0,
+   "params": {
+    "n": 500000
+   },
+   "problem_size": 500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 19,
+    "M": 524288,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 2048,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 19,
+      "M": 524288,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 2048,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 19,
+      "M": 524288,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 2048,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 19,
+      "M": 524288,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 2048,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 3.565872,
+   "latency_ms_samples": [
+    3.560892,
+    3.569537,
+    3.567187
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     3.560892,
+     3.569537,
+     3.567187
+    ],
+    "mean_ms": 3.565872,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_9e05f1ae_t0",
+     "case000_9e05f1ae_t1",
+     "case000_9e05f1ae_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 3.560892,
+      "union_ms": 3.560892,
+      "span_ms": 3.954885,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "257392120579263",
+       "373989962763982",
+       "51569820815057",
+       "583851369979823"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 3.569537,
+      "union_ms": 3.569537,
+      "span_ms": 3.657883,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "257392120579263",
+       "373989962763982",
+       "51569820815057",
+       "583851369979823"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 3.567187,
+      "union_ms": 3.567187,
+      "span_ms": 3.655721,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "257392120579263",
+       "373989962763982",
+       "51569820815057",
+       "583851369979823"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671114.4746368,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 14.042819738388062
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 17.510200023651123,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "757560afa00a8137",
+   "case_index": 2,
+   "params": {
+    "n": 1000000
+   },
+   "problem_size": 1000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 20,
+    "M": 1048576,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 4096,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 20,
+      "M": 1048576,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 4096,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 20,
+      "M": 1048576,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 4096,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 20,
+      "M": 1048576,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 4096,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 3.7624363333333335,
+   "latency_ms_samples": [
+    3.751262,
+    3.766488,
+    3.769559
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     3.751262,
+     3.766488,
+     3.769559
+    ],
+    "mean_ms": 3.7624363333333335,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case002_df2977e6_t0",
+     "case002_df2977e6_t1",
+     "case002_df2977e6_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 3.751262,
+      "union_ms": 3.751262,
+      "span_ms": 6.104067,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1033627355955887",
+       "119314536961285",
+       "136859246095199",
+       "442782165102354"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 3.766488,
+      "union_ms": 3.766488,
+      "span_ms": 3.854366,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1033627355955887",
+       "119314536961285",
+       "136859246095199",
+       "442782165102354"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 3.769559,
+      "union_ms": 3.769559,
+      "span_ms": 3.853793,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1033627355955887",
+       "119314536961285",
+       "136859246095199",
+       "442782165102354"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671132.085472,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 13.926260471343994
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 18.241713285446167,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "50a8ec1265eec9cd",
+   "case_index": 4,
+   "params": {
+    "n": 1500000
+   },
+   "problem_size": 1500000,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py\", line 404, in run\n    _pad_sort_kernel[2](data, work, L, _CH)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('CH', 8192), ('L', 21)):g2|[1500000]:Half:S(C)|[2097152]:Half:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:397:14: error: 'nisa.memset' op Expected 'dst' partition start in {0} for a 96-partition access, but got 32.\n    result = get_backend().memset(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:208:13: note: called from\n            nisa.memset(dst=h0[pa:P, c0:c1], value=_INF)\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:178:1: note: called from\ndef _pad_sort_kernel(data, work, L, CH):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py(404): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791671150.4260767,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.085791826248169,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "b0a7b6f6560c1688",
+   "case_index": 6,
+   "params": {
+    "n": 2000000
+   },
+   "problem_size": 2000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 21,
+    "M": 2097152,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 8192,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 21,
+      "M": 2097152,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 8192,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 21,
+      "M": 2097152,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 8192,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 21,
+      "M": 2097152,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 8192,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 4.396258333333333,
+   "latency_ms_samples": [
+    4.39347,
+    4.395158,
+    4.400147
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     4.39347,
+     4.395158,
+     4.400147
+    ],
+    "mean_ms": 4.396258333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case006_d5236b28_t0",
+     "case006_d5236b28_t1",
+     "case006_d5236b28_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 4.39347,
+      "union_ms": 4.39347,
+      "span_ms": 4.479768,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "224878641818941",
+       "258243833821936",
+       "268351763070196",
+       "494225879424046"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 4.395158,
+      "union_ms": 4.395158,
+      "span_ms": 4.478989,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "224878641818941",
+       "258243833821936",
+       "268351763070196",
+       "494225879424046"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 4.400147,
+      "union_ms": 4.400147,
+      "span_ms": 4.481025,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "224878641818941",
+       "258243833821936",
+       "268351763070196",
+       "494225879424046"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671151.5959358,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 17.70162272453308
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 24.578783750534058,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "26a46af6e746a984",
+   "case_index": 8,
+   "params": {
+    "n": 2500000
+   },
+   "problem_size": 2500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 22,
+    "M": 4194304,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 16384,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 5.920866333333334,
+   "latency_ms_samples": [
+    5.922347,
+    5.926718,
+    5.913534
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     5.922347,
+     5.926718,
+     5.913534
+    ],
+    "mean_ms": 5.920866333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case008_68483b8c_t0",
+     "case008_68483b8c_t1",
+     "case008_68483b8c_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.922347,
+      "union_ms": 5.835182,
+      "span_ms": 5.89697,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "1026940923742828",
+       "53140936852757",
+       "757220714366282",
+       "884069089425143"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.926718,
+      "union_ms": 5.841027,
+      "span_ms": 5.898943,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "1026940923742828",
+       "53140936852757",
+       "757220714366282",
+       "884069089425143"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.913534,
+      "union_ms": 5.827041,
+      "span_ms": 5.895403,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "1026940923742828",
+       "53140936852757",
+       "757220714366282",
+       "884069089425143"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671176.2729363,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 22.1901113986969
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 36.58793616294861,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "e0e2919a224416b5",
+   "case_index": 10,
+   "params": {
+    "n": 3000000
+   },
+   "problem_size": 3000000,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py\", line 404, in run\n    _pad_sort_kernel[2](data, work, L, _CH)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('CH', 8192), ('L', 22)):g2|[3000000]:Half:S(C)|[4194304]:Half:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:397:14: error: 'nisa.memset' op Expected 'dst' partition start in {0} for a 96-partition access, but got 32.\n    result = get_backend().memset(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:208:13: note: called from\n            nisa.memset(dst=h0[pa:P, c0:c1], value=_INF)\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:178:1: note: called from\ndef _pad_sort_kernel(data, work, L, CH):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py(404): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791671212.9588315,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.2317256927490234,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "e98e73159892ec15",
+   "case_index": 12,
+   "params": {
+    "n": 3500000
+   },
+   "problem_size": 3500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 22,
+    "M": 4194304,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 16384,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 5.833839,
+   "latency_ms_samples": [
+    5.803894,
+    5.847512,
+    5.850111
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     5.803894,
+     5.847512,
+     5.850111
+    ],
+    "mean_ms": 5.833839,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_745950cf_t0",
+     "case012_745950cf_t1",
+     "case012_745950cf_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.803894,
+      "union_ms": 5.803894,
+      "span_ms": 6.799228,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "53140936852757",
+       "719818143220463",
+       "757220714366282",
+       "884069089425143"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.847512,
+      "union_ms": 5.832978,
+      "span_ms": 5.895981,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "53140936852757",
+       "719818143220463",
+       "757220714366282",
+       "884069089425143"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.850111,
+      "union_ms": 5.834136,
+      "span_ms": 5.895445,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "53140936852757",
+       "719818143220463",
+       "757220714366282",
+       "884069089425143"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671214.2764318,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 12.995161056518555
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 27.494970321655273,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "e66d091e2941c784",
+   "case_index": 14,
+   "params": {
+    "n": 4000000
+   },
+   "problem_size": 4000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 22,
+    "M": 4194304,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 16384,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 22,
+      "M": 4194304,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 16384,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 5.803101000000001,
+   "latency_ms_samples": [
+    5.796973,
+    5.805899,
+    5.806431
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     5.796973,
+     5.805899,
+     5.806431
+    ],
+    "mean_ms": 5.803101000000001,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case014_d5b2caa5_t0",
+     "case014_d5b2caa5_t1",
+     "case014_d5b2caa5_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.796973,
+      "union_ms": 5.796973,
+      "span_ms": 6.933403,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "53140936852757",
+       "532024582222092",
+       "757220714366282",
+       "884069089425143"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.805899,
+      "union_ms": 5.805899,
+      "span_ms": 5.893926,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "53140936852757",
+       "532024582222092",
+       "757220714366282",
+       "884069089425143"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 5.806431,
+      "union_ms": 5.806431,
+      "span_ms": 5.894675,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "53140936852757",
+       "532024582222092",
+       "757220714366282",
+       "884069089425143"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671241.870095,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 13.796868085861206
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 28.707569122314453,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "cf6c08df8aecb77f",
+   "case_index": 16,
+   "params": {
+    "n": 4500000
+   },
+   "problem_size": 4500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 23,
+    "M": 8388608,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 32768,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 9.172125666666666,
+   "latency_ms_samples": [
+    9.160625,
+    9.174853,
+    9.180899
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     9.160625,
+     9.174853,
+     9.180899
+    ],
+    "mean_ms": 9.172125666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case016_921f7fb5_t0",
+     "case016_921f7fb5_t1",
+     "case016_921f7fb5_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.160625,
+      "union_ms": 8.949711,
+      "span_ms": 9.014214,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "29451944264001",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.174853,
+      "union_ms": 8.962393,
+      "span_ms": 9.017182,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "29451944264001",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.180899,
+      "union_ms": 8.96848,
+      "span_ms": 9.024443,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "29451944264001",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671270.6759462,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 35.621354818344116
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 74.63881850242615,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "84c472ec387d2591",
+   "case_index": 18,
+   "params": {
+    "n": 5000000
+   },
+   "problem_size": 5000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 23,
+    "M": 8388608,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 32768,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 9.167083333333332,
+   "latency_ms_samples": [
+    9.161253,
+    9.167957,
+    9.17204
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     9.161253,
+     9.167957,
+     9.17204
+    ],
+    "mean_ms": 9.167083333333332,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case018_2ff75556_t0",
+     "case018_2ff75556_t1",
+     "case018_2ff75556_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.161253,
+      "union_ms": 8.965834,
+      "span_ms": 9.022633,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "327272532308690",
+       "460932356376756",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.167957,
+      "union_ms": 8.972997,
+      "span_ms": 9.028013,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "327272532308690",
+       "460932356376756",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.17204,
+      "union_ms": 8.977173,
+      "span_ms": 9.02588,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "327272532308690",
+       "460932356376756",
+       "508530928253096",
+       "729460360883241"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671345.4166799,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 22.793073892593384
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 62.03600215911865,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "781698ea66400dea",
+   "case_index": 20,
+   "params": {
+    "n": 5500000
+   },
+   "problem_size": 5500000,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py\", line 404, in run\n    _pad_sort_kernel[2](data, work, L, _CH)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('CH', 8192), ('L', 23)):g2|[5500000]:Half:S(C)|[8388608]:Half:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:397:14: error: 'nisa.memset' op Expected 'dst' partition start in {0} for a 96-partition access, but got 32.\n    result = get_backend().memset(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:208:13: note: called from\n            nisa.memset(dst=h0[pa:P, c0:c1], value=_INF)\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:178:1: note: called from\ndef _pad_sort_kernel(data, work, L, CH):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py(404): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791671407.5586286,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.4041528701782227,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "dc19824de00e6aa6",
+   "case_index": 22,
+   "params": {
+    "n": 6000000
+   },
+   "problem_size": 6000000,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py\", line 404, in run\n    _pad_sort_kernel[2](data, work, L, _CH)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('CH', 8192), ('L', 23)):g2|[6000000]:Half:S(C)|[8388608]:Half:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:397:14: error: 'nisa.memset' op Expected 'dst' partition start in {0} for a 96-partition access, but got 32.\n    result = get_backend().memset(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:208:13: note: called from\n            nisa.memset(dst=h0[pa:P, c0:c1], value=_INF)\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py:178:1: note: called from\ndef _pad_sort_kernel(data, work, L, CH):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/impl_nki.py(404): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791671409.066589,
+     "ok": false
+    }
+   },
+   "elapsed_s": 1.4232475757598877,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "d0305ec2de78256c",
+   "case_index": 24,
+   "params": {
+    "n": 6500000
+   },
+   "problem_size": 6500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 23,
+    "M": 8388608,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 32768,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 9.060697666666668,
+   "latency_ms_samples": [
+    9.066766,
+    9.059996,
+    9.055331
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     9.066766,
+     9.059996,
+     9.055331
+    ],
+    "mean_ms": 9.060697666666668,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case024_cbedf43b_t0",
+     "case024_cbedf43b_t1",
+     "case024_cbedf43b_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.066766,
+      "union_ms": 8.96796,
+      "span_ms": 9.020379,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "327272532308690",
+       "508530928253096",
+       "729460360883241",
+       "999796768113849"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.059996,
+      "union_ms": 8.963444,
+      "span_ms": 9.023349,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "327272532308690",
+       "508530928253096",
+       "729460360883241",
+       "999796768113849"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.055331,
+      "union_ms": 8.957436,
+      "span_ms": 9.021285,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "327272532308690",
+       "508530928253096",
+       "729460360883241",
+       "999796768113849"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671410.5947134,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 25.36592698097229
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 63.89941644668579,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "25ea4ca217a018e5",
+   "case_index": 26,
+   "params": {
+    "n": 7000000
+   },
+   "problem_size": 7000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 23,
+    "M": 8388608,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 32768,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 9.022824333333334,
+   "latency_ms_samples": [
+    9.015119,
+    9.026616,
+    9.026738
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     9.015119,
+     9.026616,
+     9.026738
+    ],
+    "mean_ms": 9.022824333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case026_1e50d810_t0",
+     "case026_1e50d810_t1",
+     "case026_1e50d810_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.015119,
+      "union_ms": 8.952908,
+      "span_ms": 9.016622,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "277481002041578",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.026616,
+      "union_ms": 8.963451,
+      "span_ms": 9.022401,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "277481002041578",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 9.026738,
+      "union_ms": 8.965917,
+      "span_ms": 9.024984,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "277481002041578",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671474.592552,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 26.3218674659729
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 64.96518230438232,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "47011a7c3a62e5dd",
+   "case_index": 28,
+   "params": {
+    "n": 7500000
+   },
+   "problem_size": 7500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 23,
+    "M": 8388608,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 32768,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 8.978904,
+   "latency_ms_samples": [
+    8.984918,
+    8.970748,
+    8.981046
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     8.984918,
+     8.970748,
+     8.981046
+    ],
+    "mean_ms": 8.978904,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case028_9bf2bf56_t0",
+     "case028_9bf2bf56_t1",
+     "case028_9bf2bf56_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 8.984918,
+      "union_ms": 8.961258,
+      "span_ms": 9.026253,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "133987899171619",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 8.970748,
+      "union_ms": 8.946184,
+      "span_ms": 9.011532,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "133987899171619",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 8.981046,
+      "union_ms": 8.955962,
+      "span_ms": 9.020821,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "133987899171619",
+       "327272532308690",
+       "508530928253096",
+       "729460360883241"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671539.6570606,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 26.871845722198486
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 65.30000329017639,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "b5383a8a268e2050",
+   "case_index": 30,
+   "params": {
+    "n": 8000000
+   },
+   "problem_size": 8000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 23,
+    "M": 8388608,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 32768,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 23,
+      "M": 8388608,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 32768,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 8.955309666666667,
+   "latency_ms_samples": [
+    8.966288,
+    8.95068,
+    8.948961
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     8.966288,
+     8.95068,
+     8.948961
+    ],
+    "mean_ms": 8.955309666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case030_3f671230_t0",
+     "case030_3f671230_t1",
+     "case030_3f671230_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 8.966288,
+      "union_ms": 8.966288,
+      "span_ms": 9.023364,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "327272532308690",
+       "508530928253096",
+       "729460360883241",
+       "944571834937130"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 8.95068,
+      "union_ms": 8.95068,
+      "span_ms": 9.019413,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "327272532308690",
+       "508530928253096",
+       "729460360883241",
+       "944571834937130"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 8.948961,
+      "union_ms": 8.948961,
+      "span_ms": 9.022067,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "327272532308690",
+       "508530928253096",
+       "729460360883241",
+       "944571834937130"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671605.0579383,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 27.718597173690796
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 66.16782832145691,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "750cf7c7ae0598d9",
+   "case_index": 32,
+   "params": {
+    "n": 8500000
+   },
+   "problem_size": 8500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 24,
+    "M": 16777216,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 65536,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 16.345906,
+   "latency_ms_samples": [
+    16.353037,
+    16.349906,
+    16.334775
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     16.353037,
+     16.349906,
+     16.334775
+    ],
+    "mean_ms": 16.345906,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case032_a10a398c_t0",
+     "case032_a10a398c_t1",
+     "case032_a10a398c_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.353037,
+      "union_ms": 15.902072,
+      "span_ms": 15.959116,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "656010086163244",
+       "817991669676418",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.349906,
+      "union_ms": 15.90306,
+      "span_ms": 15.961967,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "656010086163244",
+       "817991669676418",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.334775,
+      "union_ms": 15.886191,
+      "span_ms": 15.947293,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "656010086163244",
+       "817991669676418",
+       "87563951875176"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671671.350012,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 72.3406491279602
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 151.96123623847961,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d9929bcb0594f0f3",
+   "case_index": 34,
+   "params": {
+    "n": 9000000
+   },
+   "problem_size": 9000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 24,
+    "M": 16777216,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 65536,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 16.341820000000002,
+   "latency_ms_samples": [
+    16.341062,
+    16.340053,
+    16.344345
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     16.341062,
+     16.340053,
+     16.344345
+    ],
+    "mean_ms": 16.341820000000002,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case034_616f15bc_t0",
+     "case034_616f15bc_t1",
+     "case034_616f15bc_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.341062,
+      "union_ms": 15.893334,
+      "span_ms": 15.949566,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "632853721960608",
+       "656010086163244",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.340053,
+      "union_ms": 15.891416,
+      "span_ms": 15.95276,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "632853721960608",
+       "656010086163244",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.344345,
+      "union_ms": 15.895484,
+      "span_ms": 15.951865,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "632853721960608",
+       "656010086163244",
+       "87563951875176"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671823.4101248,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 46.05369567871094
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 126.65174961090088,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "9f5d0638accbfb1a",
+   "case_index": 36,
+   "params": {
+    "n": 9500000
+   },
+   "problem_size": 9500000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 24,
+    "M": 16777216,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 65536,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 16.345414333333334,
+   "latency_ms_samples": [
+    16.341706,
+    16.346369,
+    16.348168
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     16.341706,
+     16.346369,
+     16.348168
+    ],
+    "mean_ms": 16.345414333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case036_6cd7b721_t0",
+     "case036_6cd7b721_t1",
+     "case036_6cd7b721_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.341706,
+      "union_ms": 15.902842,
+      "span_ms": 15.95148,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "60655776832297",
+       "656010086163244",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.346369,
+      "union_ms": 15.907729,
+      "span_ms": 15.962897,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "60655776832297",
+       "656010086163244",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.348168,
+      "union_ms": 15.905969,
+      "span_ms": 15.952701,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "595194651410736",
+       "60655776832297",
+       "656010086163244",
+       "87563951875176"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791671950.1631088,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 47.924444913864136
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 127.56006193161011,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "6eeb4f68e53fb6ea",
+   "case_index": 38,
+   "params": {
+    "n": 10000000
+   },
+   "problem_size": 10000000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "L": 24,
+    "M": 16777216,
+    "compare_chunk": 8192,
+    "cross_chunk": 4096,
+    "free_per_partition": 65536,
+    "half_buffers": 3,
+    "kernels": 4,
+    "memset_chunk": 8192,
+    "programs": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "L": 24,
+      "M": 16777216,
+      "compare_chunk": 8192,
+      "cross_chunk": 4096,
+      "free_per_partition": 65536,
+      "half_buffers": 3,
+      "kernels": 4,
+      "memset_chunk": 8192,
+      "programs": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 16.312603333333332,
+   "latency_ms_samples": [
+    16.315677,
+    16.321126,
+    16.301007
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     16.315677,
+     16.321126,
+     16.301007
+    ],
+    "mean_ms": 16.312603333333332,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case038_849eeabf_t0",
+     "case038_849eeabf_t1",
+     "case038_849eeabf_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.315677,
+      "union_ms": 15.898521,
+      "span_ms": 15.948664,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "546901273554963",
+       "595194651410736",
+       "656010086163244",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.321126,
+      "union_ms": 15.903501,
+      "span_ms": 15.961526,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "546901273554963",
+       "595194651410736",
+       "656010086163244",
+       "87563951875176"
+      ]
+     },
+     {
+      "n_executions": 4,
+      "busy_sum_ms": 16.301007,
+      "union_ms": 15.885736,
+      "span_ms": 15.949905,
+      "overlap_between_executions": true,
+      "model_ids": [
+       "546901273554963",
+       "595194651410736",
+       "656010086163244",
+       "87563951875176"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791672077.8226712,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 48.849921226501465
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 129.16010808944702,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::dealloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 20,
+ "valid_cases": 16,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "50a8ec1265eec9cd",
+  "case_index": 4,
+  "params": {
+   "n": 1500000
+  },
+  "status": "runtime_error"
+ },
+ "suite_stopped": null,
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 129,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "L": 19,
+   "M": 524288,
+   "compare_chunk": 8192,
+   "cross_chunk": 4096,
+   "free_per_partition": 2048,
+   "half_buffers": 3,
+   "kernels": 4,
+   "memset_chunk": 8192,
+   "programs": 2
+  },
+  {
+   "L": 20,
+   "M": 1048576,
+   "compare_chunk": 8192,
+   "cross_chunk": 4096,
+   "free_per_partition": 4096,
+   "half_buffers": 3,
+   "kernels": 4,
+   "memset_chunk": 8192,
+   "programs": 2
+  },
+  {
+   "L": 21,
+   "M": 2097152,
+   "compare_chunk": 8192,
+   "cross_chunk": 4096,
+   "free_per_partition": 8192,
+   "half_buffers": 3,
+   "kernels": 4,
+   "memset_chunk": 8192,
+   "programs": 2
+  },
+  {
+   "L": 22,
+   "M": 4194304,
+   "compare_chunk": 8192,
+   "cross_chunk": 4096,
+   "free_per_partition": 16384,
+   "half_buffers": 3,
+   "kernels": 4,
+   "memset_chunk": 8192,
+   "programs": 2
+  },
+  {
+   "L": 23,
+   "M": 8388608,
+   "compare_chunk": 8192,
+   "cross_chunk": 4096,
+   "free_per_partition": 32768,
+   "half_buffers": 3,
+   "kernels": 4,
+   "memset_chunk": 8192,
+   "programs": 2
+  },
+  {
+   "L": 24,
+   "M": 16777216,
+   "compare_chunk": 8192,
+   "cross_chunk": 4096,
+   "free_per_partition": 65536,
+   "half_buffers": 3,
+   "kernels": 4,
+   "memset_chunk": 8192,
+   "programs": 2
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 1101.689787864685,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "635834368",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "639516672",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 1867282954,
+ "worker_rc": 0,
+ "worker_wall_s": 1102.8314728736877,
+ "device_lock_wait_s": 1435.4052529335022,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/bitonic_sort_4_1_ll2hacyb",
+ "archive": {
+  "dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/base/Trn2/nki/claude/bitonic_sort/fp16/csaa7d57e1d85162/round_04/attempt_1/eval_0001/evaluation",
+  "files": [
+   "cases.jsonl",
+   "impl_nki.py",
+   "job.json",
+   "progress.json",
+   "result.json",
+   "worker_stderr.txt",
+   "worker_stdout.txt"
+  ]
+ },
+ "evaluation_revision": "eval_0001"
+}

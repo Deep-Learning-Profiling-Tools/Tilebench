@@ -1,0 +1,2351 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "numerical_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791668376.7265255,
+   "ok": true,
+   "elapsed_s": 0.0045206546783447266
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 593924 / 1024000 (58.0%)\nGreatest absolute difference: 1.8671875 at index (941, 578) (up to 0.01 allowed)\nGreatest relative difference: 30496.0 at index (875, 605) (up to 0.01 allowed)",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "01fb5f4aaed377e1c93b",
+  "round": 4,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "228f82019d53985e",
+   "case_index": 0,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 1000
+   },
+   "problem_size": 1024000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 593924 / 1024000 (58.0%)\nGreatest absolute difference: 1.8671875 at index (941, 578) (up to 0.01 allowed)\nGreatest relative difference: 30496.0 at index (875, 605) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 4,
+    "row_tile": 128,
+    "rows_per_program": 500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 4,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 4,
+      "row_tile": 128,
+      "rows_per_program": 500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 4,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668376.7316647,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.2465410232543945
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 593924 / 1024000 (58.0%)\nGreatest absolute difference: 1.8671875 at index (941, 578) (up to 0.01 allowed)\nGreatest relative difference: 30496.0 at index (875, 605) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.2660467624664307,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3ba50b04cc30d8f4",
+   "case_index": 3,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 2000
+   },
+   "problem_size": 2048000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 920584 / 2048000 (45.0%)\nGreatest absolute difference: 0.890625 at index (77, 729) (up to 0.01 allowed)\nGreatest relative difference: inf at index (1520, 660) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 8,
+    "row_tile": 128,
+    "rows_per_program": 1000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 8,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 8,
+      "row_tile": 128,
+      "rows_per_program": 1000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 8,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668380.0949621,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.5998620986938477
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 920584 / 2048000 (45.0%)\nGreatest absolute difference: 0.890625 at index (77, 729) (up to 0.01 allowed)\nGreatest relative difference: inf at index (1520, 660) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 1.6296164989471436,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "9beebcaa56e0512c",
+   "case_index": 6,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 3000
+   },
+   "problem_size": 3072000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 1137900 / 3072000 (37.0%)\nGreatest absolute difference: 0.59375 at index (1226, 636) (up to 0.01 allowed)\nGreatest relative difference: inf at index (615, 814) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 12,
+    "row_tile": 128,
+    "rows_per_program": 1500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 12,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 12,
+      "row_tile": 128,
+      "rows_per_program": 1500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 12,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668381.8218567,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.7366225719451904
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 1137900 / 3072000 (37.0%)\nGreatest absolute difference: 0.59375 at index (1226, 636) (up to 0.01 allowed)\nGreatest relative difference: inf at index (615, 814) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 1.7792997360229492,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "b20ec0bf90000a3e",
+   "case_index": 9,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 4000
+   },
+   "problem_size": 4096000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 1207271 / 4096000 (29.5%)\nGreatest absolute difference: 0.671875 at index (1888, 171) (up to 0.01 allowed)\nGreatest relative difference: 20928.0 at index (684, 823) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 16,
+    "row_tile": 128,
+    "rows_per_program": 2000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 16,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 16,
+      "row_tile": 128,
+      "rows_per_program": 2000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 16,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668383.6963458,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.8560764789581299
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 1207271 / 4096000 (29.5%)\nGreatest absolute difference: 0.671875 at index (1888, 171) (up to 0.01 allowed)\nGreatest relative difference: 20928.0 at index (684, 823) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 1.9123597145080566,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "69bf52a911172664",
+   "case_index": 12,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 5000
+   },
+   "problem_size": 5120000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 1182266 / 5120000 (23.1%)\nGreatest absolute difference: 0.328125 at index (4882, 270) (up to 0.01 allowed)\nGreatest relative difference: 15656.0 at index (2652, 170) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 20,
+    "row_tile": 128,
+    "rows_per_program": 2500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 20,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 20,
+      "row_tile": 128,
+      "rows_per_program": 2500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 20,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668385.7046673,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.993086338043213
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 1182266 / 5120000 (23.1%)\nGreatest absolute difference: 0.328125 at index (4882, 270) (up to 0.01 allowed)\nGreatest relative difference: 15656.0 at index (2652, 170) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.06160831451416,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "ca77b1d9619cae0d",
+   "case_index": 15,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 6000
+   },
+   "problem_size": 6144000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 1071690 / 6144000 (17.4%)\nGreatest absolute difference: 0.3125 at index (664, 264) (up to 0.01 allowed)\nGreatest relative difference: 18240.0 at index (1240, 734) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 24,
+    "row_tile": 128,
+    "rows_per_program": 3000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 24,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 24,
+      "row_tile": 128,
+      "rows_per_program": 3000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 24,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668387.8677373,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.0975582599639893
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 1071690 / 6144000 (17.4%)\nGreatest absolute difference: 0.3125 at index (664, 264) (up to 0.01 allowed)\nGreatest relative difference: 18240.0 at index (1240, 734) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.175769567489624,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "26916432d28a6620",
+   "case_index": 18,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 7000
+   },
+   "problem_size": 7168000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 1006486 / 7168000 (14.0%)\nGreatest absolute difference: 0.2421875 at index (1592, 376) (up to 0.01 allowed)\nGreatest relative difference: 4476.0 at index (5103, 745) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 28,
+    "row_tile": 128,
+    "rows_per_program": 3500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 28,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 28,
+      "row_tile": 128,
+      "rows_per_program": 3500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 28,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668390.1471415,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.2274112701416016
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 1006486 / 7168000 (14.0%)\nGreatest absolute difference: 0.2421875 at index (1592, 376) (up to 0.01 allowed)\nGreatest relative difference: 4476.0 at index (5103, 745) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.3183367252349854,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "a02a440fbd50a105",
+   "case_index": 21,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 8000
+   },
+   "problem_size": 8192000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 872095 / 8192000 (10.6%)\nGreatest absolute difference: 0.203125 at index (292, 275) (up to 0.01 allowed)\nGreatest relative difference: 22144.0 at index (353, 784) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 32,
+    "row_tile": 128,
+    "rows_per_program": 4000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 32,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 32,
+      "row_tile": 128,
+      "rows_per_program": 4000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 32,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668392.569422,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.3362793922424316
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 872095 / 8192000 (10.6%)\nGreatest absolute difference: 0.203125 at index (292, 275) (up to 0.01 allowed)\nGreatest relative difference: 22144.0 at index (353, 784) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.4362034797668457,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "6400eaa1e0b832c8",
+   "case_index": 24,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 9000
+   },
+   "problem_size": 9216000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 734702 / 9216000 (8.0%)\nGreatest absolute difference: 0.1875 at index (6138, 139) (up to 0.01 allowed)\nGreatest relative difference: 7004.0 at index (7333, 237) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 36,
+    "row_tile": 128,
+    "rows_per_program": 4500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 36,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 36,
+      "row_tile": 128,
+      "rows_per_program": 4500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 36,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668395.1125135,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.4612386226654053
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 734702 / 9216000 (8.0%)\nGreatest absolute difference: 0.1875 at index (6138, 139) (up to 0.01 allowed)\nGreatest relative difference: 7004.0 at index (7333, 237) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.5715527534484863,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "11029b4c802fb5b9",
+   "case_index": 27,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 10000
+   },
+   "problem_size": 10240000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 580590 / 10240000 (5.7%)\nGreatest absolute difference: 0.1875 at index (2118, 727) (up to 0.01 allowed)\nGreatest relative difference: 3548.0 at index (1716, 46) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 40,
+    "row_tile": 128,
+    "rows_per_program": 5000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 40,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 40,
+      "row_tile": 128,
+      "rows_per_program": 5000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 40,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668397.7893734,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.5804128646850586
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 580590 / 10240000 (5.7%)\nGreatest absolute difference: 0.1875 at index (2118, 727) (up to 0.01 allowed)\nGreatest relative difference: 3548.0 at index (1716, 46) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.70945143699646,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "06d0e0f7380228c2",
+   "case_index": 30,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 11000
+   },
+   "problem_size": 11264000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 431284 / 11264000 (3.8%)\nGreatest absolute difference: 0.171875 at index (2670, 724) (up to 0.01 allowed)\nGreatest relative difference: 10312.0 at index (8345, 3) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 43,
+    "row_tile": 128,
+    "rows_per_program": 5500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 43,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 43,
+      "row_tile": 128,
+      "rows_per_program": 5500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 43,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668400.604223,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.6947543621063232
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 431284 / 11264000 (3.8%)\nGreatest absolute difference: 0.171875 at index (2670, 724) (up to 0.01 allowed)\nGreatest relative difference: 10312.0 at index (8345, 3) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.8319602012634277,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "e07c993ea276e7cb",
+   "case_index": 33,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 12000
+   },
+   "problem_size": 12288000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 363903 / 12288000 (3.0%)\nGreatest absolute difference: 0.15625 at index (5637, 871) (up to 0.01 allowed)\nGreatest relative difference: 4944.0 at index (782, 27) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 47,
+    "row_tile": 128,
+    "rows_per_program": 6000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 47,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 47,
+      "row_tile": 128,
+      "rows_per_program": 6000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 47,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668403.5383046,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.761197328567505
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 363903 / 12288000 (3.0%)\nGreatest absolute difference: 0.15625 at index (5637, 871) (up to 0.01 allowed)\nGreatest relative difference: 4944.0 at index (782, 27) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 2.9136292934417725,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "6d9244cbdf8435ca",
+   "case_index": 36,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 13000
+   },
+   "problem_size": 13312000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 256999 / 13312000 (1.9%)\nGreatest absolute difference: 0.1171875 at index (5231, 674) (up to 0.01 allowed)\nGreatest relative difference: 18000.0 at index (3160, 173) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 51,
+    "row_tile": 128,
+    "rows_per_program": 6500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 51,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 51,
+      "row_tile": 128,
+      "rows_per_program": 6500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 51,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668406.5526562,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.9069926738739014
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 256999 / 13312000 (1.9%)\nGreatest absolute difference: 0.1171875 at index (5231, 674) (up to 0.01 allowed)\nGreatest relative difference: 18000.0 at index (3160, 173) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.0746798515319824,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3bdc49b781bf1f99",
+   "case_index": 39,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 14000
+   },
+   "problem_size": 14336000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 228289 / 14336000 (1.6%)\nGreatest absolute difference: 0.125 at index (5062, 730) (up to 0.01 allowed)\nGreatest relative difference: 3512.0 at index (11128, 702) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 55,
+    "row_tile": 128,
+    "rows_per_program": 7000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 55,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 55,
+      "row_tile": 128,
+      "rows_per_program": 7000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 55,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668409.7368367,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.0077219009399414
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 228289 / 14336000 (1.6%)\nGreatest absolute difference: 0.125 at index (5062, 730) (up to 0.01 allowed)\nGreatest relative difference: 3512.0 at index (11128, 702) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.196672201156616,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "b37302868a765458",
+   "case_index": 42,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 15000
+   },
+   "problem_size": 15360000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 194257 / 15360000 (1.3%)\nGreatest absolute difference: 0.09375 at index (13993, 287) (up to 0.01 allowed)\nGreatest relative difference: 4808.0 at index (7911, 855) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 59,
+    "row_tile": 128,
+    "rows_per_program": 7500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 59,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 59,
+      "row_tile": 128,
+      "rows_per_program": 7500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 59,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668413.0299244,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.115943431854248
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 194257 / 15360000 (1.3%)\nGreatest absolute difference: 0.09375 at index (13993, 287) (up to 0.01 allowed)\nGreatest relative difference: 4808.0 at index (7911, 855) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.306349277496338,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "449e8fe224ea2138",
+   "case_index": 45,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 16000
+   },
+   "problem_size": 16384000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 152469 / 16384000 (0.9%)\nGreatest absolute difference: 0.0859375 at index (1173, 338) (up to 0.01 allowed)\nGreatest relative difference: 651.0 at index (10012, 344) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 63,
+    "row_tile": 128,
+    "rows_per_program": 8000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 63,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 63,
+      "row_tile": 128,
+      "rows_per_program": 8000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 63,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668416.4461355,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.2371020317077637
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 152469 / 16384000 (0.9%)\nGreatest absolute difference: 0.0859375 at index (1173, 338) (up to 0.01 allowed)\nGreatest relative difference: 651.0 at index (10012, 344) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.4458348751068115,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "f1ac570e240af6f7",
+   "case_index": 48,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 17000
+   },
+   "problem_size": 17408000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 95419 / 17408000 (0.5%)\nGreatest absolute difference: 0.08203125 at index (12251, 797) (up to 0.01 allowed)\nGreatest relative difference: 4184.0 at index (8622, 843) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 67,
+    "row_tile": 128,
+    "rows_per_program": 8500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 0,
+    "tiles_per_program": 67,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 67,
+      "row_tile": 128,
+      "rows_per_program": 8500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 0,
+      "tiles_per_program": 67,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668419.9984705,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.3553080558776855
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 95419 / 17408000 (0.5%)\nGreatest absolute difference: 0.08203125 at index (12251, 797) (up to 0.01 allowed)\nGreatest relative difference: 4184.0 at index (8622, 843) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.6324117183685303,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "5a837592958e4e75",
+   "case_index": 51,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 18000
+   },
+   "problem_size": 18432000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 75459 / 18432000 (0.4%)\nGreatest absolute difference: 0.05859375 at index (14610, 322) (up to 0.01 allowed)\nGreatest relative difference: 2722.0 at index (12689, 275) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 70,
+    "row_tile": 128,
+    "rows_per_program": 9000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 1,
+    "tiles_per_program": 71,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 70,
+      "row_tile": 128,
+      "rows_per_program": 9000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 1,
+      "tiles_per_program": 71,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668423.7397997,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.5002238750457764
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 75459 / 18432000 (0.4%)\nGreatest absolute difference: 0.05859375 at index (14610, 322) (up to 0.01 allowed)\nGreatest relative difference: 2722.0 at index (12689, 275) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.7884483337402344,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "6ab370c0816418a0",
+   "case_index": 54,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 19000
+   },
+   "problem_size": 19456000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 63418 / 19456000 (0.3%)\nGreatest absolute difference: 0.0703125 at index (1238, 380) (up to 0.01 allowed)\nGreatest relative difference: 652.5 at index (6626, 201) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 70,
+    "row_tile": 128,
+    "rows_per_program": 9500,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 5,
+    "tiles_per_program": 75,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 70,
+      "row_tile": 128,
+      "rows_per_program": 9500,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 5,
+      "tiles_per_program": 75,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668427.635946,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.603877544403076
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 63418 / 19456000 (0.3%)\nGreatest absolute difference: 0.0703125 at index (1238, 380) (up to 0.01 allowed)\nGreatest relative difference: 652.5 at index (6626, 201) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 3.9118738174438477,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "34876a5be4fc865e",
+   "case_index": 57,
+   "params": {
+    "C": 1024,
+    "eps": 1e-05,
+    "N": 20000
+   },
+   "problem_size": 20480000,
+   "status": "numerical_error",
+   "diagnostic": "fresh_storage: Tensor-likes are not close!\n\nMismatched elements: 42350 / 20480000 (0.2%)\nGreatest absolute difference: 0.06640625 at index (8454, 733) (up to 0.01 allowed)\nGreatest relative difference: 24464.0 at index (7443, 893) (up to 0.01 allowed)",
+   "config": {
+    "apply": "vectorE_mul_add_fp32",
+    "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+    "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+    "programs": 2,
+    "resident_tiles": 70,
+    "row_tile": 128,
+    "rows_per_program": 10000,
+    "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+    "stream_ring": 3,
+    "streamed_tiles": 9,
+    "tiles_per_program": 79,
+    "tmp_ring": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "apply": "vectorE_mul_add_fp32",
+      "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+      "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+      "programs": 2,
+      "resident_tiles": 70,
+      "row_tile": 128,
+      "rows_per_program": 10000,
+      "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+      "stream_ring": 3,
+      "streamed_tiles": 9,
+      "tiles_per_program": 79,
+      "tmp_ring": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791668431.6563864,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.7529754638671875
+    },
+    "numerical_checks": {
+     "executions_candidate": 1,
+     "executions_reference": 1,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": false,
+       "message": "Tensor-likes are not close!\n\nMismatched elements: 42350 / 20480000 (0.2%)\nGreatest absolute difference: 0.06640625 at index (8454, 733) (up to 0.01 allowed)\nGreatest relative difference: 24464.0 at index (7443, 893) (up to 0.01 allowed)",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    }
+   },
+   "elapsed_s": 4.091951131820679,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 20,
+ "valid_cases": 0,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "228f82019d53985e",
+  "case_index": 0,
+  "params": {
+   "C": 1024,
+   "eps": 1e-05,
+   "N": 1000
+  },
+  "status": "numerical_error"
+ },
+ "suite_stopped": null,
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 41,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 4,
+   "row_tile": 128,
+   "rows_per_program": 500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 4,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 8,
+   "row_tile": 128,
+   "rows_per_program": 1000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 8,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 12,
+   "row_tile": 128,
+   "rows_per_program": 1500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 12,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 16,
+   "row_tile": 128,
+   "rows_per_program": 2000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 16,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 20,
+   "row_tile": 128,
+   "rows_per_program": 2500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 20,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 24,
+   "row_tile": 128,
+   "rows_per_program": 3000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 24,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 28,
+   "row_tile": 128,
+   "rows_per_program": 3500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 28,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 32,
+   "row_tile": 128,
+   "rows_per_program": 4000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 32,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 36,
+   "row_tile": 128,
+   "rows_per_program": 4500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 36,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 40,
+   "row_tile": 128,
+   "rows_per_program": 5000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 40,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 43,
+   "row_tile": 128,
+   "rows_per_program": 5500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 43,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 47,
+   "row_tile": 128,
+   "rows_per_program": 6000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 47,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 51,
+   "row_tile": 128,
+   "rows_per_program": 6500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 51,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 55,
+   "row_tile": 128,
+   "rows_per_program": 7000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 55,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 59,
+   "row_tile": 128,
+   "rows_per_program": 7500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 59,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 63,
+   "row_tile": 128,
+   "rows_per_program": 8000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 63,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 67,
+   "row_tile": 128,
+   "rows_per_program": 8500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 0,
+   "tiles_per_program": 67,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 70,
+   "row_tile": 128,
+   "rows_per_program": 9000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 1,
+   "tiles_per_program": 71,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 70,
+   "row_tile": 128,
+   "rows_per_program": 9500,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 5,
+   "tiles_per_program": 75,
+   "tmp_ring": 2
+  },
+  {
+   "apply": "vectorE_mul_add_fp32",
+   "broadcast": "tensorE_ones_x_diag_fp32_per_bank",
+   "combine": "barrier_fixed_order_block_layout_newton_rsqrt",
+   "programs": 2,
+   "resident_tiles": 70,
+   "row_tile": 128,
+   "rows_per_program": 10000,
+   "stats": "tensorE_gram_diag_plus_ones_fp32acc",
+   "stream_ring": 3,
+   "streamed_tiles": 9,
+   "tiles_per_program": 79,
+   "tmp_ring": 2
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 67.24916887283325,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "610992128",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "611233792",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 474320734,
+ "worker_rc": 0,
+ "worker_wall_s": 68.36830043792725,
+ "device_lock_wait_s": 1760.170523405075,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/batch_normalization_4_1_kctutmv8"
+}

@@ -1,0 +1,3133 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "runtime_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791685520.7030518,
+   "ok": true,
+   "elapsed_s": 0.0036406517028808594
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[1024,128]:Float:S(C)|[1024,128]:Float:S(C)|[1024,128]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "3f71bfb8c79075002b9d",
+  "round": 5,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "7823bce8b17a514a",
+   "case_index": 0,
+   "params": {
+    "eps": 1e-06,
+    "M": 1024,
+    "D": 32
+   },
+   "problem_size": 32768,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 33,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 512,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 32,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 512,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 512,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 512,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.022692666666666667,
+   "latency_ms_samples": [
+    0.022676,
+    0.022632,
+    0.02277
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.022676,
+     0.022632,
+     0.02277
+    ],
+    "mean_ms": 0.022692666666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_87975fca_t0",
+     "case000_87975fca_t1",
+     "case000_87975fca_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.022676,
+      "union_ms": 0.022676,
+      "span_ms": 0.022676,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "236638747445010"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.022632,
+      "union_ms": 0.022632,
+      "span_ms": 0.022632,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "236638747445010"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.02277,
+      "union_ms": 0.02277,
+      "span_ms": 0.02277,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "236638747445010"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685520.707338,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.151034116744995
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.777043581008911,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "28c0120b06db2af0",
+   "case_index": 1,
+   "params": {
+    "eps": 1e-06,
+    "M": 1024,
+    "D": 64
+   },
+   "problem_size": 65536,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 65,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 512,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 64,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 512,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 512,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 512,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.024143,
+   "latency_ms_samples": [
+    0.024306,
+    0.024022,
+    0.024101
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.024306,
+     0.024022,
+     0.024101
+    ],
+    "mean_ms": 0.024143,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case001_f03f95df_t0",
+     "case001_f03f95df_t1",
+     "case001_f03f95df_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024306,
+      "union_ms": 0.024306,
+      "span_ms": 0.024306,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "438190175276797"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024022,
+      "union_ms": 0.024022,
+      "span_ms": 0.024022,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "438190175276797"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024101,
+      "union_ms": 0.024101,
+      "span_ms": 0.024101,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "438190175276797"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685526.5896041,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3473701477050781
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.926295757293701,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "a722a6b93de940de",
+   "case_index": 2,
+   "params": {
+    "eps": 1e-06,
+    "M": 1024,
+    "D": 128
+   },
+   "problem_size": 131072,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[1024,128]:Float:S(C)|[1024,128]:Float:S(C)|[1024,128]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685530.6313267,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.18616890907287598,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "c33a7ece8f4e5dc9",
+   "case_index": 3,
+   "params": {
+    "eps": 1e-06,
+    "M": 1024,
+    "D": 256
+   },
+   "problem_size": 262144,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[1024,256]:Float:S(C)|[1024,256]:Float:S(C)|[1024,256]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685530.9047675,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.21123933792114258,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "fb51b2b2f3747a54",
+   "case_index": 4,
+   "params": {
+    "eps": 1e-06,
+    "M": 2048,
+    "D": 32
+   },
+   "problem_size": 65536,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 33,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 1024,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 32,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 1024,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 1024,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 1024,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.02609966666666667,
+   "latency_ms_samples": [
+    0.026374,
+    0.026013,
+    0.025912
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.026374,
+     0.026013,
+     0.025912
+    ],
+    "mean_ms": 0.02609966666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case004_ddae5227_t0",
+     "case004_ddae5227_t1",
+     "case004_ddae5227_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.026374,
+      "union_ms": 0.026374,
+      "span_ms": 0.026374,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "294803877562593"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.026013,
+      "union_ms": 0.026013,
+      "span_ms": 0.026013,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "294803877562593"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.025912,
+      "union_ms": 0.025912,
+      "span_ms": 0.025912,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "294803877562593"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685531.2121203,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3777885437011719
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.9914581775665283,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "dbc60b969bbd45b2",
+   "case_index": 5,
+   "params": {
+    "eps": 1e-06,
+    "M": 2048,
+    "D": 64
+   },
+   "problem_size": 131072,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 65,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 1024,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 64,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 1024,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 1024,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 1024,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.029467999999999998,
+   "latency_ms_samples": [
+    0.029385,
+    0.029699,
+    0.02932
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.029385,
+     0.029699,
+     0.02932
+    ],
+    "mean_ms": 0.029467999999999998,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case005_2e689b61_t0",
+     "case005_2e689b61_t1",
+     "case005_2e689b61_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.029385,
+      "union_ms": 0.029385,
+      "span_ms": 0.029385,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196932789800390"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.029699,
+      "union_ms": 0.029699,
+      "span_ms": 0.029699,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196932789800390"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.02932,
+      "union_ms": 0.02932,
+      "span_ms": 0.02932,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196932789800390"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685535.3059893,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.372290849685669
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.9613356590270996,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "e7ee79cab9cec389",
+   "case_index": 6,
+   "params": {
+    "eps": 1e-06,
+    "M": 2048,
+    "D": 128
+   },
+   "problem_size": 262144,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[2048,128]:Float:S(C)|[2048,128]:Float:S(C)|[2048,128]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685539.367483,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.21759533882141113,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "ce1d5d1ae639c44b",
+   "case_index": 7,
+   "params": {
+    "eps": 1e-06,
+    "M": 2048,
+    "D": 256
+   },
+   "problem_size": 524288,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[2048,256]:Float:S(C)|[2048,256]:Float:S(C)|[2048,256]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685539.6549814,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.2639331817626953,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "d86819899dca442c",
+   "case_index": 8,
+   "params": {
+    "eps": 1e-06,
+    "M": 4096,
+    "D": 32
+   },
+   "problem_size": 131072,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 33,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 2048,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 32,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 2048,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 2048,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 2048,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.03320033333333333,
+   "latency_ms_samples": [
+    0.032966,
+    0.033276,
+    0.033359
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.032966,
+     0.033276,
+     0.033359
+    ],
+    "mean_ms": 0.03320033333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case008_9de7c9e7_t0",
+     "case008_9de7c9e7_t1",
+     "case008_9de7c9e7_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.032966,
+      "union_ms": 0.032966,
+      "span_ms": 0.032966,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1107204005149902"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.033276,
+      "union_ms": 0.033276,
+      "span_ms": 0.033276,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1107204005149902"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.033359,
+      "union_ms": 0.033359,
+      "span_ms": 0.033359,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1107204005149902"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685539.9923592,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4478890895843506
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.059389114379883,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "58310c7a33399a99",
+   "case_index": 9,
+   "params": {
+    "eps": 1e-06,
+    "M": 4096,
+    "D": 64
+   },
+   "problem_size": 262144,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 65,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 2048,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 64,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 2048,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 2048,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 2048,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.037022,
+   "latency_ms_samples": [
+    0.036522,
+    0.037523,
+    0.037021
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.036522,
+     0.037523,
+     0.037021
+    ],
+    "mean_ms": 0.037022,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case009_35acc66e_t0",
+     "case009_35acc66e_t1",
+     "case009_35acc66e_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.036522,
+      "union_ms": 0.036522,
+      "span_ms": 0.036522,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "749851228288593"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.037523,
+      "union_ms": 0.037523,
+      "span_ms": 0.037523,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "749851228288593"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.037021,
+      "union_ms": 0.037021,
+      "span_ms": 0.037021,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "749851228288593"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685544.1501188,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.472597360610962
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.082972049713135,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "662f91e2a70d77c6",
+   "case_index": 10,
+   "params": {
+    "eps": 1e-06,
+    "M": 4096,
+    "D": 128
+   },
+   "problem_size": 524288,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[4096,128]:Float:S(C)|[4096,128]:Float:S(C)|[4096,128]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685548.3416407,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.2909414768218994,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "f367fda00f4e5909",
+   "case_index": 11,
+   "params": {
+    "eps": 1e-06,
+    "M": 4096,
+    "D": 256
+   },
+   "problem_size": 1048576,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[4096,256]:Float:S(C)|[4096,256]:Float:S(C)|[4096,256]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685548.7395363,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.3857996463775635,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "6ec74d541d7b93fa",
+   "case_index": 12,
+   "params": {
+    "eps": 1e-06,
+    "M": 8192,
+    "D": 32
+   },
+   "problem_size": 262144,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 33,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 4096,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 32,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 4096,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 4096,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 4096,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.04745966666666667,
+   "latency_ms_samples": [
+    0.047704,
+    0.047199,
+    0.047476
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.047704,
+     0.047199,
+     0.047476
+    ],
+    "mean_ms": 0.04745966666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_780a79a4_t0",
+     "case012_780a79a4_t1",
+     "case012_780a79a4_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.047704,
+      "union_ms": 0.047704,
+      "span_ms": 0.047704,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "476754993461679"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.047199,
+      "union_ms": 0.047199,
+      "span_ms": 0.047199,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "476754993461679"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.047476,
+      "union_ms": 0.047476,
+      "span_ms": 0.047476,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "476754993461679"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685549.2228844,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.62428879737854
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.152994155883789,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "02c5ea43f2143e92",
+   "case_index": 13,
+   "params": {
+    "eps": 1e-06,
+    "M": 8192,
+    "D": 64
+   },
+   "problem_size": 524288,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 65,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 4096,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 64,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 4096,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 4096,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 4096,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.056248,
+   "latency_ms_samples": [
+    0.056197,
+    0.056226,
+    0.056321
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.056197,
+     0.056226,
+     0.056321
+    ],
+    "mean_ms": 0.056248,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case013_c95b7523_t0",
+     "case013_c95b7523_t1",
+     "case013_c95b7523_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056197,
+      "union_ms": 0.056197,
+      "span_ms": 0.056197,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "871802462906673"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056226,
+      "union_ms": 0.056226,
+      "span_ms": 0.056226,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "871802462906673"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056321,
+      "union_ms": 0.056321,
+      "span_ms": 0.056321,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "871802462906673"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685553.475862,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.6344103813171387
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.2786641120910645,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "6b066fd52d1840d5",
+   "case_index": 14,
+   "params": {
+    "eps": 1e-06,
+    "M": 8192,
+    "D": 128
+   },
+   "problem_size": 1048576,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[8192,128]:Float:S(C)|[8192,128]:Float:S(C)|[8192,128]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685557.8604193,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.43488597869873047,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "aa5df84e67a09cf3",
+   "case_index": 15,
+   "params": {
+    "eps": 1e-06,
+    "M": 8192,
+    "D": 256
+   },
+   "problem_size": 2097152,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[8192,256]:Float:S(C)|[8192,256]:Float:S(C)|[8192,256]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685558.4032705,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.6241750717163086,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "b9b8830370fc8d32",
+   "case_index": 16,
+   "params": {
+    "eps": 1e-06,
+    "M": 10000,
+    "D": 32
+   },
+   "problem_size": 320000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 33,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 5000,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 32,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 5000,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 5000,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 33,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 5000,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 32,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.055405333333333334,
+   "latency_ms_samples": [
+    0.054671,
+    0.056014,
+    0.055531
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.054671,
+     0.056014,
+     0.055531
+    ],
+    "mean_ms": 0.055405333333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case016_cff4fd36_t0",
+     "case016_cff4fd36_t1",
+     "case016_cff4fd36_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.054671,
+      "union_ms": 0.054671,
+      "span_ms": 0.054671,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "976560803043585"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056014,
+      "union_ms": 0.056014,
+      "span_ms": 0.056014,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "976560803043585"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.055531,
+      "union_ms": 0.055531,
+      "span_ms": 0.055531,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "976560803043585"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685559.1263041,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.6899805068969727
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.267879486083984,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d01f81ea8173b9b2",
+   "case_index": 17,
+   "params": {
+    "eps": 1e-06,
+    "M": 10000,
+    "D": 64
+   },
+   "problem_size": 640000,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "batch_factor": "power_of_two_up_to_8",
+    "contraction_tile_max": 128,
+    "exchanged_state_width": 65,
+    "feature_maps": "batched_fused_fp32",
+    "launches": 1,
+    "lnc": 2,
+    "normalizer_fusion": "augmented_state_column",
+    "normalizer_precision": "fp32",
+    "numerator_multiply": "fp32",
+    "padding": false,
+    "rows_per_core": 5000,
+    "sequence_chunk": 1024,
+    "sequence_splits": 2,
+    "state_combine": "two_core_fp32_add",
+    "state_feature_tile": 64,
+    "state_multiply": "fp32"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 5000,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 5000,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "batch_factor": "power_of_two_up_to_8",
+      "contraction_tile_max": 128,
+      "exchanged_state_width": 65,
+      "feature_maps": "batched_fused_fp32",
+      "launches": 1,
+      "lnc": 2,
+      "normalizer_fusion": "augmented_state_column",
+      "normalizer_precision": "fp32",
+      "numerator_multiply": "fp32",
+      "padding": false,
+      "rows_per_core": 5000,
+      "sequence_chunk": 1024,
+      "sequence_splits": 2,
+      "state_combine": "two_core_fp32_add",
+      "state_feature_tile": 64,
+      "state_multiply": "fp32"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.06698366666666666,
+   "latency_ms_samples": [
+    0.067776,
+    0.066353,
+    0.066822
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.067776,
+     0.066353,
+     0.066822
+    ],
+    "mean_ms": 0.06698366666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case017_e6b70319_t0",
+     "case017_e6b70319_t1",
+     "case017_e6b70319_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.067776,
+      "union_ms": 0.067776,
+      "span_ms": 0.067776,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "729376898814358"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.066353,
+      "union_ms": 0.066353,
+      "span_ms": 0.066353,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "729376898814358"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.066822,
+      "union_ms": 0.066822,
+      "span_ms": 0.066822,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "729376898814358"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791685563.4923499,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.727111577987671
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.409978866577148,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "1b48a2d2800eb88b",
+   "case_index": 18,
+   "params": {
+    "eps": 1e-06,
+    "M": 10000,
+    "D": 128
+   },
+   "problem_size": 1280000,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[10000,128]:Float:S(C)|[10000,128]:Float:S(C)|[10000,128]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685568.0004811,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.5070276260375977,
+   "host_fallback_probe": []
+  },
+  {
+   "case_id": "ce2b6798ed813407",
+   "case_index": 19,
+   "params": {
+    "eps": 1e-06,
+    "M": 10000,
+    "D": 256
+   },
+   "problem_size": 2560000,
+   "status": "runtime_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 406, in run_case\n    cand_run(*inputs)\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 340, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py\", line 146, in run\n    out = fn(*a, **k)\n          ^^^^^^^^^^^\n  File \"/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py\", line 406, in run\n    return _linear_attention[2](\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py\", line 665, in __call__\n    return _C._nki_dispatch_eager(\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1555, in _fn\n    if prior is not None:\n       ^^^^^^^^^^^^^^^^^\nRuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:(('chunk', 1024), ('eps', 1e-06), ('use_tf32', True)):g2|[10000,256]:Float:S(C)|[10000,256]:Float:S(C)|[10000,256]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification\n\nnote: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:314:14: error: 'nisa.matmul' op 'stationary' must be a float type, got '!nisa.float32r'\n    result = get_backend().nc_matmul(\n             ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:143:13: note: called from\n            nisa.nc_matmul(\n            ^\n/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py:55:1: note: called from\ndef _linear_attention(Q, K, V, eps, chunk, use_tf32):\n^\n__notes__ (len=1):\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n\nAt:\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36): nki_call_lower_func\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1555): _fn\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py(1548): _fn\n  /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(665): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/framework/kernel.py(616): __call__\n  /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/_traceback_util.py(63): wrapper\n  /home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta/impl_nki.py(406): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron.py(146): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(340): run\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py(406): run_case\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(162): run_job\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(208): main\n  /home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/neuron_worker.py(214): <module>\n  <frozen runpy>(88): _run_code\n  <frozen runpy>(198): _run_module_as_main\n\n--------------------\nFor simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791685568.5895686,
+     "ok": false
+    }
+   },
+   "elapsed_s": 0.7404677867889404,
+   "host_fallback_probe": []
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 20,
+ "valid_cases": 10,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "a722a6b93de940de",
+  "case_index": 2,
+  "params": {
+   "eps": 1e-06,
+   "M": 1024,
+   "D": 128
+  },
+  "status": "runtime_error"
+ },
+ "suite_stopped": null,
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 81,
+  "restores": [
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   },
+   {
+    "where": "before candidate call",
+    "restored": {
+     "cuda.matmul.fp32_precision": [
+      "none",
+      "ieee"
+     ]
+    }
+   }
+  ],
+  "restore_count": 20
+ },
+ "configs_distinct": [
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 33,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 512,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 32,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 65,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 512,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 64,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 33,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 1024,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 32,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 65,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 1024,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 64,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 33,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 2048,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 32,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 65,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 2048,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 64,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 33,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 4096,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 32,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 65,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 4096,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 64,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 33,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 5000,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 32,
+   "state_multiply": "fp32"
+  },
+  {
+   "batch_factor": "power_of_two_up_to_8",
+   "contraction_tile_max": 128,
+   "exchanged_state_width": 65,
+   "feature_maps": "batched_fused_fp32",
+   "launches": 1,
+   "lnc": 2,
+   "normalizer_fusion": "augmented_state_column",
+   "normalizer_precision": "fp32",
+   "numerator_multiply": "fp32",
+   "padding": false,
+   "rows_per_core": 5000,
+   "sequence_chunk": 1024,
+   "sequence_splits": 2,
+   "state_combine": "two_core_fp32_add",
+   "state_feature_tile": 64,
+   "state_multiply": "fp32"
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 57.76903533935547,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "734994432",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "735756288",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 231491711,
+ "worker_rc": 0,
+ "worker_wall_s": 58.918001651763916,
+ "device_lock_wait_s": 533.9174675941467,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/linear_self_attention_5_1__o8xu6ta",
+ "archive": {
+  "dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/base/Trn2/nki/gpt/linear_self_attention/fp32/csc732b2bf2559b5/round_05/attempt_1/eval_0001/evaluation",
+  "files": [
+   "cases.jsonl",
+   "impl_nki.py",
+   "job.json",
+   "progress.json",
+   "result.json",
+   "worker_stderr.txt",
+   "worker_stdout.txt"
+  ]
+ },
+ "evaluation_revision": "eval_0001"
+}

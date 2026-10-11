@@ -1,4 +1,4 @@
-# Trn2 NKI LLM Base (protocol revision 4) — preparation and launch record
+# Trn2 NKI LLM Base (protocol revision 4) — preparation, launch and campaign record
 
 Branch `exp/llm-trn2` (worktree `tb_wt/_llm_trn2`). Revision-4 protocol unchanged:
 
@@ -7,7 +7,8 @@ Branch `exp/llm-trn2` (worktree `tb_wt/_llm_trn2`). Revision-4 protocol unchange
 - generators GPT `gpt-6.1-sol` (reasoning xhigh) and Claude `claude-opus-5-5` (adaptive thinking, effort xhigh);
 - `review_required` items are adjudicated by Claude Code under the existing checker rules.
 
-Nothing here changes B200 / GH200 / MI300X data or their branches.
+Nothing here changes B200 / GH200 / MI300X data or their branches. The formal campaign finished 2026-10-11 05:15Z
+(360/360 rounds); see "Campaign outcome" at the end.
 
 ## Environment
 
@@ -220,3 +221,47 @@ The unit cap covers the scheduler only. The evaluation container runs under dock
 API generation runs concurrently (adaptive per provider, global evaluation backlog 16). Device evaluation is serial
 under the Trn2 lock (one candidate on one logical NeuronCore at a time). Tokens and USD are recorded per attempt under
 the frozen pricing snapshot.
+
+## Campaign outcome (complete 2026-10-11 05:15Z)
+
+The publication export (`python -m tilebench.llm.v2 export-publication`) is at
+`artifacts/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/`. It holds every round of all 72 trajectories, 0 withheld,
+because every injected component is publishable. Further files beside it:
+
+- `campaign_report.{json,md}`, `cost_report.json` and `coverage.json`, written by the CLI commands of the same names.
+- `scheduler/`: the three `scheduler_summary_*.json` files and the `telemetry/` jsonl (concurrency and scheduler events),
+  with `SHA256SUMS`. The export globs only `summary_*.json`, so these were copied by hand.
+
+The run cache under `outputs/` stays git-ignored.
+
+Execution:
+
+- 72/72 trajectories `complete`, 360/360 rounds, exactly one attempt per round.
+- No same-round regeneration and no duplicate request.
+- Unit exit 0; scheduler `errors: []`, `refused_tracks: []`.
+- The only interruption was the `--resume` relaunch described above.
+
+| | rounds | valid | compile_error | format_error | runtime_error | numerical_error | contract_violation | tasks with ≥1 valid round | logical tokens | est. USD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| gpt-6.1-sol | 180 | 141 | 26 | 0 | 8 | 4 | 1 | 35/36 | 6,501,157 | 29.22 |
+| claude-opus-5-5 | 180 | 132 | 17 | 21 | 2 | 6 | 2 | 33/36 | 19,886,926 | 273.49 |
+| total | 360 | 273 | 43 | 21 | 10 | 10 | 3 | | 26,388,083 | 302.71 |
+
+Compliance reviews: 19 `review_required` rounds were adjudicated by `claude-code` from the source, contract, rules
+and evidence only. 18 were found compliant and 1 a violation. Each decision and its rationale is in the trajectory's
+`reviews.jsonl`.
+
+- Compliant:
+  - in-kernel NKI access-pattern views (`.permute`) used by in-kernel DMA transposes (gpt batched_matmul r1–r5);
+  - shape-only `_LAST_CONFIG` metadata (gpt flash_decode r1–r5, claude flash_decode r3–r5);
+  - an import-time `inspect.signature` probe of the installed NKI API (claude jacobi_stencil_2d r3–r5);
+  - scale indexing by floor division by the block side (gpt weight_dequant r2, r5).
+- Violation: claude dropout r4. `run()` tries up to five kernel variants or configurations in a try/except cascade and
+  caches the outcome in `_MODE_BY_N`. That is the runtime configuration search forbidden by system rules 3/4 and the
+  dropout contract.
+
+Reporting caveat, open, to be fixed after the campaign on the owner's go: `devtools.recompute_metrics` passes all 45
+representative operators to `aggregate` as eligible. On Trn2 the exact E̅(B) then comes out None, and the lower bound
+is scaled by 36/45. The minimum fix is a device-aware eligible / unsupported denominator taken from
+`support.task_table`. It is a no-op on B200, GH200 and MI300X, where all 45 are eligible. Do not quote Trn2 `metrics`
+output until that fix lands. `campaign_report`, `cost_report` and `coverage` do not use that aggregation.

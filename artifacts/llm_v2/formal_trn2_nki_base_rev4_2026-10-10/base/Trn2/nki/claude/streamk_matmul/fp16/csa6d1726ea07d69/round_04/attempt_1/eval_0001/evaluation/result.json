@@ -1,0 +1,3566 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "compile_error",
+ "stages": {
+  "import_compile": {
+   "started": 1791681678.9903584,
+   "ok": true,
+   "elapsed_s": 0.004346132278442383
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 407, in run_case\n    sync()\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/neuron.py\", line 307, in synchronize\n    torch_neuronx.synchronize(device)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/__init__.py\", line 596, in synchronize\n    _C._neuron_synchronize(device_index)\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1548, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\nRuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global;\nerror message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: [INTERNAL_ERROR] [NCC_IBIR092] Live-in/Live-out MemoryLocation: _mem_18_17 not allocated to MemoryType: DRAM in function: candidate_impl._streamk_kernel - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obtain more information using the 'XLA_IR_DEBUG' and 'XLA_HLO_DEBUG' environment variables.\n2026-10-11T01:24:00Z Non-signal exit. Backend exited with code 1 and stderr: [INTERNAL_ERROR] [NCC_IBIR092] Live-in/Live-out MemoryLocation: _mem_18_17 not allocated to MemoryType: DRAM in function: candidate_impl._streamk_kernel - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obtain more information using the 'XLA_IR_DEBUG' and 'XLA_HLO_DEBUG' environment variables.\"\nneff cache key=nki_73__streamk_kernel_64085caebd2377b6_(('CW', 1024), ('SB', 1024))_[2]_((torch.Size([4096, 4096]), torch.float16), (torch.Size([4096, 4096]), torch.float16)):bafa76eb59bdb7612a8b38ea274ab3ef471dee3075a75d950eb0f9b871f2ce4c\nNote: Neuron errors are reported asynchronously. The Python traceback shows where the\nerror was detected (synchronization point), not necessarily where the failing operation\nwas dispatched. For synchronous error reporting, set NEURON_LAUNCH_BLOCKING=1.\n",
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "f37d9d5126db7e5e892b",
+  "round": 4,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "65297c4e5b3a3302",
+   "case_index": 0,
+   "params": {
+    "k": 4096,
+    "m": 1024,
+    "n": 4096
+   },
+   "problem_size": 4096,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 256,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 2048,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 254,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 2,
+    "psum_banks": 6,
+    "rolled_loop_trips": 0,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 1,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 256,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2048,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 254,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 2,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 256,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2048,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 254,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 2,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 256,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2048,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 254,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 2,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.346926,
+   "latency_ms_samples": [
+    0.345616,
+    0.346898,
+    0.348264
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.345616,
+     0.346898,
+     0.348264
+    ],
+    "mean_ms": 0.346926,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_fab56057_t0",
+     "case000_fab56057_t1",
+     "case000_fab56057_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.345616,
+      "union_ms": 0.345616,
+      "span_ms": 0.345616,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "735147970186521"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.346898,
+      "union_ms": 0.346898,
+      "span_ms": 0.346898,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "735147970186521"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.348264,
+      "union_ms": 0.348264,
+      "span_ms": 0.348264,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "735147970186521"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681678.99536,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.17408299446106
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.467622518539429,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3b127c156a03d3d8",
+   "case_index": 3,
+   "params": {
+    "k": 4096,
+    "m": 1024,
+    "n": 5120
+   },
+   "problem_size": 5120,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 320,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 2560,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 318,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 3,
+    "psum_banks": 6,
+    "rolled_loop_trips": 0,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 1,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 320,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2560,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 318,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 3,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 320,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2560,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 318,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 3,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 320,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2560,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 318,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 3,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.3980143333333333,
+   "latency_ms_samples": [
+    0.401264,
+    0.398081,
+    0.394698
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.401264,
+     0.398081,
+     0.394698
+    ],
+    "mean_ms": 0.3980143333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case003_71d0368b_t0",
+     "case003_71d0368b_t1",
+     "case003_71d0368b_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.401264,
+      "union_ms": 0.401264,
+      "span_ms": 0.401264,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "708619091473170"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.398081,
+      "union_ms": 0.398081,
+      "span_ms": 0.398081,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "708619091473170"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.394698,
+      "union_ms": 0.394698,
+      "span_ms": 0.394698,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "708619091473170"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681687.5646627,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.936472177505493
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 7.100573539733887,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "055ac589ec15650a",
+   "case_index": 6,
+   "params": {
+    "k": 4096,
+    "m": 1024,
+    "n": 11008
+   },
+   "problem_size": 11008,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 688,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 5504,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 686,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 6,
+    "psum_banks": 6,
+    "rolled_loop_trips": 0,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 1,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 688,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 5504,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 686,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 6,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 688,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 5504,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 686,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 6,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 688,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 5504,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 686,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 6,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.7715356666666667,
+   "latency_ms_samples": [
+    0.784769,
+    0.775443,
+    0.754395
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.784769,
+     0.775443,
+     0.754395
+    ],
+    "mean_ms": 0.7715356666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case006_c851166f_t0",
+     "case006_c851166f_t1",
+     "case006_c851166f_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.784769,
+      "union_ms": 0.784769,
+      "span_ms": 0.784769,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "195147709723767"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.775443,
+      "union_ms": 0.775443,
+      "span_ms": 0.775443,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "195147709723767"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.754395,
+      "union_ms": 0.754395,
+      "span_ms": 0.754395,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "195147709723767"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681694.7690957,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 7.097124099731445
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 10.97417688369751,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "333ae72f3945fd4b",
+   "case_index": 9,
+   "params": {
+    "k": 4096,
+    "m": 1024,
+    "n": 14336
+   },
+   "problem_size": 14336,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 896,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 7168,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 894,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 7,
+    "psum_banks": 6,
+    "rolled_loop_trips": 0,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 1,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 896,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 7168,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 894,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 7,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 896,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 7168,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 894,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 7,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 896,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 7168,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 894,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 7,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 1.0596086666666666,
+   "latency_ms_samples": [
+    1.065583,
+    1.054005,
+    1.059238
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     1.065583,
+     1.054005,
+     1.059238
+    ],
+    "mean_ms": 1.0596086666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case009_65cf808d_t0",
+     "case009_65cf808d_t1",
+     "case009_65cf808d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.065583,
+      "union_ms": 1.065583,
+      "span_ms": 1.065583,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "848038510597513"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.054005,
+      "union_ms": 1.054005,
+      "span_ms": 1.054005,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "848038510597513"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.059238,
+      "union_ms": 1.059238,
+      "span_ms": 1.059238,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "848038510597513"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681705.8424466,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 8.913235664367676
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 13.21687936782837,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "63fcf9014219d923",
+   "case_index": 12,
+   "params": {
+    "k": 4096,
+    "m": 1024,
+    "n": 28672
+   },
+   "problem_size": 28672,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 1792,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 14336,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 1790,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 14,
+    "psum_banks": 6,
+    "rolled_loop_trips": 0,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 1,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1792,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 14336,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1790,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 14,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1792,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 14336,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1790,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 14,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1792,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 14336,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1790,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 14,
+      "psum_banks": 6,
+      "rolled_loop_trips": 0,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 1,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 2.050796333333333,
+   "latency_ms_samples": [
+    2.04667,
+    2.052326,
+    2.053393
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     2.04667,
+     2.052326,
+     2.053393
+    ],
+    "mean_ms": 2.050796333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_1b0a5e5b_t0",
+     "case012_1b0a5e5b_t1",
+     "case012_1b0a5e5b_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 2.04667,
+      "union_ms": 2.04667,
+      "span_ms": 2.04667,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "534452713243129"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 2.052326,
+      "union_ms": 2.052326,
+      "span_ms": 2.052326,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "534452713243129"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 2.053393,
+      "union_ms": 2.053393,
+      "span_ms": 2.053393,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "534452713243129"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681719.1601753,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 18.725727319717407
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 24.770819902420044,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "f968a1cfbe6f9efb",
+   "case_index": 15,
+   "params": {
+    "k": 4096,
+    "m": 2048,
+    "n": 4096
+   },
+   "problem_size": 4096,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 512,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 2048,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 510,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 2,
+    "psum_banks": 6,
+    "rolled_loop_trips": 1,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 2,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 512,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2048,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 510,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 2,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 512,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2048,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 510,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 2,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 512,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2048,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 510,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 2,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.601838,
+   "latency_ms_samples": [
+    0.607294,
+    0.593949,
+    0.604271
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.607294,
+     0.593949,
+     0.604271
+    ],
+    "mean_ms": 0.601838,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case015_3731bc1e_t0",
+     "case015_3731bc1e_t1",
+     "case015_3731bc1e_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.607294,
+      "union_ms": 0.607294,
+      "span_ms": 0.607294,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "806141878054569"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.593949,
+      "union_ms": 0.593949,
+      "span_ms": 0.593949,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "806141878054569"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.604271,
+      "union_ms": 0.604271,
+      "span_ms": 0.604271,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "806141878054569"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681744.0306911,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.281407833099365
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.475829601287842,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "f848606f426441ba",
+   "case_index": 18,
+   "params": {
+    "k": 4096,
+    "m": 2048,
+    "n": 5120
+   },
+   "problem_size": 5120,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 640,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 2560,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 638,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 3,
+    "psum_banks": 6,
+    "rolled_loop_trips": 1,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 2,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 640,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2560,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 638,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 3,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 640,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2560,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 638,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 3,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 640,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 2560,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 638,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 3,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.7137293333333333,
+   "latency_ms_samples": [
+    0.740671,
+    0.71274,
+    0.687777
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.740671,
+     0.71274,
+     0.687777
+    ],
+    "mean_ms": 0.7137293333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case018_63fc5739_t0",
+     "case018_63fc5739_t1",
+     "case018_63fc5739_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.740671,
+      "union_ms": 0.740671,
+      "span_ms": 0.740671,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "879399162924368"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.71274,
+      "union_ms": 0.71274,
+      "span_ms": 0.71274,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "879399162924368"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.687777,
+      "union_ms": 0.687777,
+      "span_ms": 0.687777,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "879399162924368"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681752.605093,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 6.269952774047852
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.586339712142944,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "5a2404973977c256",
+   "case_index": 21,
+   "params": {
+    "k": 4096,
+    "m": 2048,
+    "n": 11008
+   },
+   "problem_size": 11008,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 1376,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 5504,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 1374,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 6,
+    "psum_banks": 6,
+    "rolled_loop_trips": 1,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 2,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1376,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 5504,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1374,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 6,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1376,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 5504,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1374,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 6,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1376,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 5504,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1374,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 6,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 1.3714319999999998,
+   "latency_ms_samples": [
+    1.36629,
+    1.352101,
+    1.395905
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     1.36629,
+     1.352101,
+     1.395905
+    ],
+    "mean_ms": 1.3714319999999998,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case021_b83ab3ca_t0",
+     "case021_b83ab3ca_t1",
+     "case021_b83ab3ca_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.36629,
+      "union_ms": 1.36629,
+      "span_ms": 1.36629,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "695135282769210"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.352101,
+      "union_ms": 1.352101,
+      "span_ms": 1.352101,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "695135282769210"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.395905,
+      "union_ms": 1.395905,
+      "span_ms": 1.395905,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "695135282769210"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681761.289395,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 12.673799753189087
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 15.97159194946289,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "5486a4f46a699e77",
+   "case_index": 24,
+   "params": {
+    "k": 4096,
+    "m": 2048,
+    "n": 14336
+   },
+   "problem_size": 14336,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 1792,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 7168,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 1790,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 7,
+    "psum_banks": 6,
+    "rolled_loop_trips": 1,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 2,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1792,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 7168,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1790,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 7,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1792,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 7168,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1790,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 7,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 1792,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 7168,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 1790,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 7,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 1.7459513333333334,
+   "latency_ms_samples": [
+    1.754939,
+    1.715473,
+    1.767442
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     1.754939,
+     1.715473,
+     1.767442
+    ],
+    "mean_ms": 1.7459513333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case024_ad0ea09a_t0",
+     "case024_ad0ea09a_t1",
+     "case024_ad0ea09a_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.754939,
+      "union_ms": 1.754939,
+      "span_ms": 1.754939,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "972512656849154"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.715473,
+      "union_ms": 1.715473,
+      "span_ms": 1.715473,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "972512656849154"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 1.767442,
+      "union_ms": 1.767442,
+      "span_ms": 1.767442,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "972512656849154"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681777.3599997,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 15.92055630683899
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 19.576256275177002,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "ebf5bdb35e3c3fd3",
+   "case_index": 27,
+   "params": {
+    "k": 4096,
+    "m": 2048,
+    "n": 28672
+   },
+   "problem_size": 28672,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "I": 32,
+    "P": 2,
+    "T": 3584,
+    "TK": 128,
+    "TM": 128,
+    "TN": 128,
+    "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+    "cols_per_program": 14336,
+    "column_group": 1024,
+    "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+    "dp_tiles": 3582,
+    "final_cast": "one fp32->fp16 rounding per finished tile",
+    "groups_per_program": 14,
+    "psum_banks": 6,
+    "rolled_loop_trips": 1,
+    "streamk_ranges": [
+     [
+      0,
+      32
+     ],
+     [
+      32,
+      64
+     ]
+    ],
+    "streamk_tiles": 2,
+    "super_block_rows": 1024,
+    "super_blocks": 2,
+    "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+    "unrolled_super_blocks": 1,
+    "zero_fill": "in-kernel, every Cacc region before its first write"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 3584,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 14336,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 3582,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 14,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 3584,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 14336,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 3582,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 14,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "I": 32,
+      "P": 2,
+      "T": 3584,
+      "TK": 128,
+      "TM": 128,
+      "TN": 128,
+      "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+      "cols_per_program": 14336,
+      "column_group": 1024,
+      "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+      "dp_tiles": 3582,
+      "final_cast": "one fp32->fp16 rounding per finished tile",
+      "groups_per_program": 14,
+      "psum_banks": 6,
+      "rolled_loop_trips": 1,
+      "streamk_ranges": [
+       [
+        0,
+        32
+       ],
+       [
+        32,
+        64
+       ]
+      ],
+      "streamk_tiles": 2,
+      "super_block_rows": 1024,
+      "super_blocks": 2,
+      "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+      "unrolled_super_blocks": 1,
+      "zero_fill": "in-kernel, every Cacc region before its first write"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 3.359008333333333,
+   "latency_ms_samples": [
+    3.365854,
+    3.342021,
+    3.36915
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     3.365854,
+     3.342021,
+     3.36915
+    ],
+    "mean_ms": 3.359008333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case027_91ac4d94_t0",
+     "case027_91ac4d94_t1",
+     "case027_91ac4d94_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 3.365854,
+      "union_ms": 3.365854,
+      "span_ms": 3.365854,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "282401418652169"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 3.342021,
+      "union_ms": 3.342021,
+      "span_ms": 3.342021,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "282401418652169"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 3.36915,
+      "union_ms": 3.36915,
+      "span_ms": 3.36915,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "282401418652169"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791681797.0354397,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 32.74356651306152
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 38.51225972175598,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "33f08da05dfd8edb",
+   "case_index": 30,
+   "params": {
+    "k": 4096,
+    "m": 4096,
+    "n": 4096
+   },
+   "problem_size": 4096,
+   "status": "compile_error",
+   "diagnostic": "Traceback (most recent call last):\n  File \"/home/ubuntu/tb_wt/_llm_trn2/tilebench/llm/v2/evaluation/worker.py\", line 407, in run_case\n    sync()\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/neuron.py\", line 307, in synchronize\n    torch_neuronx.synchronize(device)\n  File \"/home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/__init__.py\", line 596, in synchronize\n    _C._neuron_synchronize(device_index)\n  File \"/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py\", line 1548, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\nRuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global;\nerror message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: [INTERNAL_ERROR] [NCC_IBIR092] Live-in/Live-out MemoryLocation: _mem_18_17 not allocated to MemoryType: DRAM in function: candidate_impl._streamk_kernel - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obtain more information using the 'XLA_IR_DEBUG' and 'XLA_HLO_DEBUG' environment variables.\n2026-10-11T01:24:00Z Non-signal exit. Backend exited with code 1 and stderr: [INTERNAL_ERROR] [NCC_IBIR092] Live-in/Live-out MemoryLocation: _mem_18_17 not allocated to MemoryType: DRAM in function: candidate_impl._streamk_kernel - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obtain more information using the 'XLA_IR_DEBUG' and 'XLA_HLO_DEBUG' environment variables.\"\nneff cache key=nki_73__streamk_kernel_64085caebd2377b6_(('CW', 1024), ('SB', 1024))_[2]_((torch.Size([4096, 4096]), torch.float16), (torch.Size([4096, 4096]), torch.float16)):bafa76eb59bdb7612a8b38ea274ab3ef471dee3075a75d950eb0f9b871f2ce4c\nNote: Neuron errors are reported asynchronously. The Python traceback shows where the\nerror was detected (synchronization point), not necessarily where the failing operation\nwas dispatched. For synchronous error reporting, set NEURON_LAUNCH_BLOCKING=1.\n",
+   "config": null,
+   "config_reads": [],
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "timing": null,
+   "timing_mode_differs": null,
+   "stages": {
+    "first_execution": {
+     "started": 1791681835.6461456,
+     "ok": false
+    }
+   },
+   "elapsed_s": 5.091939687728882,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "627963f410ba7df5",
+   "case_index": 33,
+   "params": {
+    "k": 4096,
+    "m": 4096,
+    "n": 5120
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "3095e087b69280d6",
+   "case_index": 36,
+   "params": {
+    "k": 4096,
+    "m": 4096,
+    "n": 11008
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "8dd5604209cdcc94",
+   "case_index": 39,
+   "params": {
+    "k": 4096,
+    "m": 4096,
+    "n": 14336
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "e78c0135a151a79c",
+   "case_index": 42,
+   "params": {
+    "k": 4096,
+    "m": 4096,
+    "n": 28672
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "fb94095850e76209",
+   "case_index": 45,
+   "params": {
+    "k": 4096,
+    "m": 8192,
+    "n": 4096
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "2ed5ac64f41f70cd",
+   "case_index": 48,
+   "params": {
+    "k": 4096,
+    "m": 8192,
+    "n": 5120
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "6555762d248f99e9",
+   "case_index": 51,
+   "params": {
+    "k": 4096,
+    "m": 8192,
+    "n": 11008
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "8ea4a891bc8841db",
+   "case_index": 54,
+   "params": {
+    "k": 4096,
+    "m": 8192,
+    "n": 14336
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  },
+  {
+   "case_id": "5c6c266da2856d2a",
+   "case_index": 57,
+   "params": {
+    "k": 4096,
+    "m": 8192,
+    "n": 28672
+   },
+   "status": "not_evaluated",
+   "diagnostic": "suite stopped at case 11 (compile_error)"
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 11,
+ "valid_cases": 10,
+ "latency_ms_geomean": null,
+ "first_failing_case": {
+  "case_id": "33f08da05dfd8edb",
+  "case_index": 30,
+  "params": {
+   "k": 4096,
+   "m": 4096,
+   "n": 4096
+  },
+  "status": "compile_error"
+ },
+ "suite_stopped": {
+  "reason": "compile_error",
+  "at_case": "33f08da05dfd8edb",
+  "position": 10
+ },
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "tf32",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "high",
+  "verifications": 82,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "I": 32,
+   "P": 2,
+   "T": 256,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 2048,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 254,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 2,
+   "psum_banks": 6,
+   "rolled_loop_trips": 0,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 1,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 320,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 2560,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 318,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 3,
+   "psum_banks": 6,
+   "rolled_loop_trips": 0,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 1,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 688,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 5504,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 686,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 6,
+   "psum_banks": 6,
+   "rolled_loop_trips": 0,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 1,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 896,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 7168,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 894,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 7,
+   "psum_banks": 6,
+   "rolled_loop_trips": 0,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 1,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 1792,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 14336,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 1790,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 14,
+   "psum_banks": 6,
+   "rolled_loop_trips": 0,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 1,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 512,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 2048,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 510,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 2,
+   "psum_banks": 6,
+   "rolled_loop_trips": 1,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 2,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 640,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 2560,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 638,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 3,
+   "psum_banks": 6,
+   "rolled_loop_trips": 1,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 2,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 1376,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 5504,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 1374,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 6,
+   "psum_banks": 6,
+   "rolled_loop_trips": 1,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 2,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 1792,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 7168,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 1790,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 7,
+   "psum_banks": 6,
+   "rolled_loop_trips": 1,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 2,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  },
+  {
+   "I": 32,
+   "P": 2,
+   "T": 3584,
+   "TK": 128,
+   "TM": 128,
+   "TN": 128,
+   "aT": "per-call TensorE transpose into HBM scratch (fp16), core barrier",
+   "cols_per_program": 14336,
+   "column_group": 1024,
+   "column_split": "program p owns columns [p*N/P, (p+1)*N/P)",
+   "dp_tiles": 3582,
+   "final_cast": "one fp32->fp16 rounding per finished tile",
+   "groups_per_program": 14,
+   "psum_banks": 6,
+   "rolled_loop_trips": 1,
+   "streamk_ranges": [
+    [
+     0,
+     32
+    ],
+    [
+     32,
+     64
+    ]
+   ],
+   "streamk_tiles": 2,
+   "super_block_rows": 1024,
+   "super_blocks": 2,
+   "swizzle": "t%P -> program; t//P -> (col group, super block, row block, col tile)",
+   "unrolled_super_blocks": 1,
+   "zero_fill": "in-kernel, every Cacc region before its first write"
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 169.65174627304077,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "705953792",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "709550080",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 233047819,
+ "worker_rc": 0,
+ "worker_wall_s": 170.78070783615112,
+ "device_lock_wait_s": 4089.3517537117004,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/streamk_matmul_4_1_mm2_guib"
+}

@@ -1,0 +1,5888 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "valid",
+ "stages": {
+  "import_compile": {
+   "started": 1791678721.1661327,
+   "ok": true,
+   "elapsed_s": 0.0031096935272216797
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": null,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "2843408925fe59a56663",
+  "round": 4,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "5ac14b1b1b7bcea5",
+   "case_index": 0,
+   "params": {
+    "n": 1048576
+   },
+   "problem_size": 1048576,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 4096,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     1536,
+     512
+    ],
+    "tiles_per_program": 3
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 4096,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       1536,
+       512
+      ],
+      "tiles_per_program": 3
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 4096,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       1536,
+       512
+      ],
+      "tiles_per_program": 3
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 4096,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       1536,
+       512
+      ],
+      "tiles_per_program": 3
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.02306633333333333,
+   "latency_ms_samples": [
+    0.02275,
+    0.023222,
+    0.023227
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.02275,
+     0.023222,
+     0.023227
+    ],
+    "mean_ms": 0.02306633333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_771c659d_t0",
+     "case000_771c659d_t1",
+     "case000_771c659d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.02275,
+      "union_ms": 0.02275,
+      "span_ms": 0.02275,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "584656987435762"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.023222,
+      "union_ms": 0.023222,
+      "span_ms": 0.023222,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "584656987435762"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.023227,
+      "union_ms": 0.023227,
+      "span_ms": 0.023227,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "584656987435762"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678721.1698549,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.0244312286376953
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.603886604309082,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d6d640085214ce5c",
+   "case_index": 4,
+   "params": {
+    "n": 2097152
+   },
+   "problem_size": 2097152,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 8192,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     512,
+     1024,
+     512
+    ],
+    "tiles_per_program": 5
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 8192,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       512,
+       1024,
+       512
+      ],
+      "tiles_per_program": 5
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 8192,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       512,
+       1024,
+       512
+      ],
+      "tiles_per_program": 5
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 8192,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       512,
+       1024,
+       512
+      ],
+      "tiles_per_program": 5
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.026641666666666664,
+   "latency_ms_samples": [
+    0.026437,
+    0.026958,
+    0.02653
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.026437,
+     0.026958,
+     0.02653
+    ],
+    "mean_ms": 0.026641666666666664,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case004_f1bb4e02_t0",
+     "case004_f1bb4e02_t1",
+     "case004_f1bb4e02_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.026437,
+      "union_ms": 0.026437,
+      "span_ms": 0.026437,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "361566236171096"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.026958,
+      "union_ms": 0.026958,
+      "span_ms": 0.026958,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "361566236171096"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.02653,
+      "union_ms": 0.02653,
+      "span_ms": 0.02653,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "361566236171096"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678726.8735821,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.2881758213043213
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.851010799407959,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "50fb0f1799bb1d33",
+   "case_index": 8,
+   "params": {
+    "n": 3145728
+   },
+   "problem_size": 3145728,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 12288,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     4608,
+     1024,
+     512
+    ],
+    "tiles_per_program": 5
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 12288,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       4608,
+       1024,
+       512
+      ],
+      "tiles_per_program": 5
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 12288,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       4608,
+       1024,
+       512
+      ],
+      "tiles_per_program": 5
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 12288,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       4608,
+       1024,
+       512
+      ],
+      "tiles_per_program": 5
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.03189,
+   "latency_ms_samples": [
+    0.031753,
+    0.031899,
+    0.032018
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.031753,
+     0.031899,
+     0.032018
+    ],
+    "mean_ms": 0.03189,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case008_fa47c82e_t0",
+     "case008_fa47c82e_t1",
+     "case008_fa47c82e_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.031753,
+      "union_ms": 0.031753,
+      "span_ms": 0.031753,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "919242839385409"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.031899,
+      "union_ms": 0.031899,
+      "span_ms": 0.031899,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "919242839385409"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.032018,
+      "union_ms": 0.032018,
+      "span_ms": 0.032018,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "919242839385409"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678730.8251426,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.299070119857788
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.9000697135925293,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "2575fda9938a31c8",
+   "case_index": 12,
+   "params": {
+    "n": 4194304
+   },
+   "problem_size": 4194304,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 16384,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     4608,
+     4096,
+     1024,
+     512
+    ],
+    "tiles_per_program": 6
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 16384,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       4608,
+       4096,
+       1024,
+       512
+      ],
+      "tiles_per_program": 6
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 16384,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       4608,
+       4096,
+       1024,
+       512
+      ],
+      "tiles_per_program": 6
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 16384,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       4608,
+       4096,
+       1024,
+       512
+      ],
+      "tiles_per_program": 6
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.038245,
+   "latency_ms_samples": [
+    0.038167,
+    0.038262,
+    0.038306
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.038167,
+     0.038262,
+     0.038306
+    ],
+    "mean_ms": 0.038245,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_17a7b30b_t0",
+     "case012_17a7b30b_t1",
+     "case012_17a7b30b_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.038167,
+      "union_ms": 0.038167,
+      "span_ms": 0.038167,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1076419108831737"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.038262,
+      "union_ms": 0.038262,
+      "span_ms": 0.038262,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1076419108831737"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.038306,
+      "union_ms": 0.038306,
+      "span_ms": 0.038306,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1076419108831737"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678734.8266764,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.311253547668457
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.9337046146392822,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "e98f54076c7e0516",
+   "case_index": 16,
+   "params": {
+    "n": 5242880
+   },
+   "problem_size": 5242880,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 20480,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     2560,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 7
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 20480,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       2560,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 7
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 20480,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       2560,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 7
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 20480,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       2560,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 7
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.044325333333333335,
+   "latency_ms_samples": [
+    0.044205,
+    0.044323,
+    0.044448
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.044205,
+     0.044323,
+     0.044448
+    ],
+    "mean_ms": 0.044325333333333335,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case016_e736d071_t0",
+     "case016_e736d071_t1",
+     "case016_e736d071_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.044205,
+      "union_ms": 0.044205,
+      "span_ms": 0.044205,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "167910979479535"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.044323,
+      "union_ms": 0.044323,
+      "span_ms": 0.044323,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "167910979479535"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.044448,
+      "union_ms": 0.044448,
+      "span_ms": 0.044448,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "167910979479535"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678738.862252,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3444981575012207
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.122910976409912,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d158194ba0673504",
+   "case_index": 20,
+   "params": {
+    "n": 6291456
+   },
+   "problem_size": 6291456,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 24576,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     6656,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 7
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 24576,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       6656,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 7
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 24576,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       6656,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 7
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 24576,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       6656,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 7
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.050714333333333333,
+   "latency_ms_samples": [
+    0.050574,
+    0.050921,
+    0.050648
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.050574,
+     0.050921,
+     0.050648
+    ],
+    "mean_ms": 0.050714333333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case020_7ff94f01_t0",
+     "case020_7ff94f01_t1",
+     "case020_7ff94f01_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.050574,
+      "union_ms": 0.050574,
+      "span_ms": 0.050574,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "798634601003333"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.050921,
+      "union_ms": 0.050921,
+      "span_ms": 0.050921,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "798634601003333"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.050648,
+      "union_ms": 0.050648,
+      "span_ms": 0.050648,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "798634601003333"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678743.0847895,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3335072994232178
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.007612228393555,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "933d29d79b36f5cb",
+   "case_index": 24,
+   "params": {
+    "n": 7340032
+   },
+   "problem_size": 7340032,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 28672,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     5632,
+     5120,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 8
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 28672,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       5632,
+       5120,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 8
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 28672,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       5632,
+       5120,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 8
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 28672,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       5632,
+       5120,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 8
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.056245666666666666,
+   "latency_ms_samples": [
+    0.056349,
+    0.056017,
+    0.056371
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.056349,
+     0.056017,
+     0.056371
+    ],
+    "mean_ms": 0.056245666666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case024_93cce004_t0",
+     "case024_93cce004_t1",
+     "case024_93cce004_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056349,
+      "union_ms": 0.056349,
+      "span_ms": 0.056349,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "63875925104993"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056017,
+      "union_ms": 0.056017,
+      "span_ms": 0.056017,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "63875925104993"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056371,
+      "union_ms": 0.056371,
+      "span_ms": 0.056371,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "63875925104993"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678747.1921527,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.333594799041748
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.035989046096802,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "9bf9e9a225c37e44",
+   "case_index": 28,
+   "params": {
+    "n": 8388608
+   },
+   "problem_size": 8388608,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 32768,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     2560,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 9
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 32768,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       2560,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 9
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 32768,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       2560,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 9
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 32768,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       2560,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 9
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.06301733333333333,
+   "latency_ms_samples": [
+    0.06309,
+    0.063072,
+    0.06289
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.06309,
+     0.063072,
+     0.06289
+    ],
+    "mean_ms": 0.06301733333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case028_980d4d2e_t0",
+     "case028_980d4d2e_t1",
+     "case028_980d4d2e_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.06309,
+      "union_ms": 0.06309,
+      "span_ms": 0.06309,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "624567917286133"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.063072,
+      "union_ms": 0.063072,
+      "span_ms": 0.063072,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "624567917286133"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.06289,
+      "union_ms": 0.06289,
+      "span_ms": 0.06289,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "624567917286133"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678751.3265638,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3637750148773193
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.158878564834595,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3155b6e48f3d469e",
+   "case_index": 32,
+   "params": {
+    "n": 9437184
+   },
+   "problem_size": 9437184,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 36864,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     6656,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 9
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 36864,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       6656,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 9
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 36864,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       6656,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 9
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 36864,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       6656,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 9
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.06880766666666667,
+   "latency_ms_samples": [
+    0.068921,
+    0.068792,
+    0.06871
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.068921,
+     0.068792,
+     0.06871
+    ],
+    "mean_ms": 0.06880766666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case032_16b62847_t0",
+     "case032_16b62847_t1",
+     "case032_16b62847_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.068921,
+      "union_ms": 0.068921,
+      "span_ms": 0.068921,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1061701804566428"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.068792,
+      "union_ms": 0.068792,
+      "span_ms": 0.068792,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1061701804566428"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.06871,
+      "union_ms": 0.06871,
+      "span_ms": 0.06871,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1061701804566428"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678755.584941,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3675758838653564
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.136231184005737,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "43156f027b71a90a",
+   "case_index": 36,
+   "params": {
+    "n": 10485760
+   },
+   "problem_size": 10485760,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 40960,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     5632,
+     5120,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 10
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 40960,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       5632,
+       5120,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 10
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 40960,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       5632,
+       5120,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 10
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 40960,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       5632,
+       5120,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 10
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.07689800000000001,
+   "latency_ms_samples": [
+    0.076784,
+    0.076991,
+    0.076919
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.076784,
+     0.076991,
+     0.076919
+    ],
+    "mean_ms": 0.07689800000000001,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case036_92572e9d_t0",
+     "case036_92572e9d_t1",
+     "case036_92572e9d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.076784,
+      "union_ms": 0.076784,
+      "span_ms": 0.076784,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "209152070999997"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.076991,
+      "union_ms": 0.076991,
+      "span_ms": 0.076991,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "209152070999997"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.076919,
+      "union_ms": 0.076919,
+      "span_ms": 0.076919,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "209152070999997"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678759.8264418,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3703548908233643
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.1512134075164795,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "aece4997c5f0a5ec",
+   "case_index": 40,
+   "params": {
+    "n": 11534336
+   },
+   "problem_size": 11534336,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 45056,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     7680,
+     7168,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 10
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 45056,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       7680,
+       7168,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 10
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 45056,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       7680,
+       7168,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 10
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 45056,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       7680,
+       7168,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 10
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.08226033333333334,
+   "latency_ms_samples": [
+    0.082153,
+    0.082231,
+    0.082397
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.082153,
+     0.082231,
+     0.082397
+    ],
+    "mean_ms": 0.08226033333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case040_7a158a7a_t0",
+     "case040_7a158a7a_t1",
+     "case040_7a158a7a_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.082153,
+      "union_ms": 0.082153,
+      "span_ms": 0.082153,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "689670228312343"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.082231,
+      "union_ms": 0.082231,
+      "span_ms": 0.082231,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "689670228312343"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.082397,
+      "union_ms": 0.082397,
+      "span_ms": 0.082397,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "689670228312343"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678764.0771987,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3779776096343994
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.171316146850586,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "5067f671c6908b2d",
+   "case_index": 44,
+   "params": {
+    "n": 12582912
+   },
+   "problem_size": 12582912,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 49152,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     2560,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 11
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 49152,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       2560,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 11
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 49152,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       2560,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 11
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 49152,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       2560,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 11
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.08852266666666668,
+   "latency_ms_samples": [
+    0.088476,
+    0.088471,
+    0.088621
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.088476,
+     0.088471,
+     0.088621
+    ],
+    "mean_ms": 0.08852266666666668,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case044_933f7931_t0",
+     "case044_933f7931_t1",
+     "case044_933f7931_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.088476,
+      "union_ms": 0.088476,
+      "span_ms": 0.088476,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "596763014175969"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.088471,
+      "union_ms": 0.088471,
+      "span_ms": 0.088471,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "596763014175969"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.088621,
+      "union_ms": 0.088621,
+      "span_ms": 0.088621,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "596763014175969"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678768.3492763,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3903632164001465
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.288709878921509,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3099d75f5e004cd4",
+   "case_index": 48,
+   "params": {
+    "n": 13631488
+   },
+   "problem_size": 13631488,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 53248,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     6656,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 11
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 53248,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 11
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 53248,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 11
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 53248,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 11
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.09488533333333334,
+   "latency_ms_samples": [
+    0.094618,
+    0.095347,
+    0.094691
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.094618,
+     0.095347,
+     0.094691
+    ],
+    "mean_ms": 0.09488533333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case048_bf7447d4_t0",
+     "case048_bf7447d4_t1",
+     "case048_bf7447d4_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.094618,
+      "union_ms": 0.094618,
+      "span_ms": 0.094618,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "707165785137931"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.095347,
+      "union_ms": 0.095347,
+      "span_ms": 0.095347,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "707165785137931"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.094691,
+      "union_ms": 0.094691,
+      "span_ms": 0.094691,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "707165785137931"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678772.7388623,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4041166305541992
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.264788866043091,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "65eb6fa184ad3b8f",
+   "case_index": 52,
+   "params": {
+    "n": 14680064
+   },
+   "problem_size": 14680064,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 57344,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     5632,
+     5120,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 12
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 57344,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       5632,
+       5120,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 12
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 57344,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       5632,
+       5120,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 12
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 57344,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       5632,
+       5120,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 12
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.10064,
+   "latency_ms_samples": [
+    0.100714,
+    0.10078,
+    0.100426
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.100714,
+     0.10078,
+     0.100426
+    ],
+    "mean_ms": 0.10064,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case052_c8d87226_t0",
+     "case052_c8d87226_t1",
+     "case052_c8d87226_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.100714,
+      "union_ms": 0.100714,
+      "span_ms": 0.100714,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196109238183074"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.10078,
+      "union_ms": 0.10078,
+      "span_ms": 0.10078,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196109238183074"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.100426,
+      "union_ms": 0.100426,
+      "span_ms": 0.100426,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196109238183074"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678777.1032424,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4180293083190918
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.415517568588257,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "8a9754406a77d25c",
+   "case_index": 56,
+   "params": {
+    "n": 15728640
+   },
+   "problem_size": 15728640,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 61440,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     7680,
+     7168,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 12
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 61440,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7680,
+       7168,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 12
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 61440,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7680,
+       7168,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 12
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 61440,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7680,
+       7168,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 12
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.10637333333333333,
+   "latency_ms_samples": [
+    0.106465,
+    0.106164,
+    0.106491
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.106465,
+     0.106164,
+     0.106491
+    ],
+    "mean_ms": 0.10637333333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case056_410b0ef4_t0",
+     "case056_410b0ef4_t1",
+     "case056_410b0ef4_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.106465,
+      "union_ms": 0.106465,
+      "span_ms": 0.106465,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "949360563940816"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.106164,
+      "union_ms": 0.106164,
+      "span_ms": 0.106164,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "949360563940816"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.106491,
+      "union_ms": 0.106491,
+      "span_ms": 0.106491,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "949360563940816"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678781.617818,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4115831851959229
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.4238526821136475,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "7efb1a40eb9d413a",
+   "case_index": 60,
+   "params": {
+    "n": 16777216
+   },
+   "problem_size": 16777216,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 65536,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     6656,
+     6144,
+     6144,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 13
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 65536,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       6656,
+       6144,
+       6144,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 13
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 65536,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       6656,
+       6144,
+       6144,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 13
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 65536,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       6656,
+       6144,
+       6144,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 13
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.11214633333333333,
+   "latency_ms_samples": [
+    0.112108,
+    0.111978,
+    0.112353
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.112108,
+     0.111978,
+     0.112353
+    ],
+    "mean_ms": 0.11214633333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case060_aa959f2d_t0",
+     "case060_aa959f2d_t1",
+     "case060_aa959f2d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.112108,
+      "union_ms": 0.112108,
+      "span_ms": 0.112108,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "799283192799775"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.111978,
+      "union_ms": 0.111978,
+      "span_ms": 0.111978,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "799283192799775"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.112353,
+      "union_ms": 0.112353,
+      "span_ms": 0.112353,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "799283192799775"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678786.1417024,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.437795877456665
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.527059316635132,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "264a9c0cd008c720",
+   "case_index": 64,
+   "params": {
+    "n": 17825792
+   },
+   "problem_size": 17825792,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 69632,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     7680,
+     7680,
+     7680,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 13
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 69632,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7680,
+       7680,
+       7680,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 13
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 69632,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7680,
+       7680,
+       7680,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 13
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 69632,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7680,
+       7680,
+       7680,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 13
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.11834966666666667,
+   "latency_ms_samples": [
+    0.118077,
+    0.118686,
+    0.118286
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.118077,
+     0.118686,
+     0.118286
+    ],
+    "mean_ms": 0.11834966666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case064_04a9f269_t0",
+     "case064_04a9f269_t1",
+     "case064_04a9f269_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.118077,
+      "union_ms": 0.118077,
+      "span_ms": 0.118077,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1050956441855767"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.118686,
+      "union_ms": 0.118686,
+      "span_ms": 0.118686,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1050956441855767"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.118286,
+      "union_ms": 0.118286,
+      "span_ms": 0.118286,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1050956441855767"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678790.770641,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.447354793548584
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.6313865184783936,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "92f9dd209998643b",
+   "case_index": 68,
+   "params": {
+    "n": 18874368
+   },
+   "problem_size": 18874368,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 73728,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     7168,
+     6656,
+     6656,
+     6656,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 14
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 73728,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7168,
+       6656,
+       6656,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 14
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 73728,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7168,
+       6656,
+       6656,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 14
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 73728,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7168,
+       6656,
+       6656,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 14
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.124761,
+   "latency_ms_samples": [
+    0.124482,
+    0.124932,
+    0.124869
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.124482,
+     0.124932,
+     0.124869
+    ],
+    "mean_ms": 0.124761,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case068_5d97deba_t0",
+     "case068_5d97deba_t1",
+     "case068_5d97deba_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.124482,
+      "union_ms": 0.124482,
+      "span_ms": 0.124482,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "642871582506466"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.124932,
+      "union_ms": 0.124932,
+      "span_ms": 0.124932,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "642871582506466"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.124869,
+      "union_ms": 0.124869,
+      "span_ms": 0.124869,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "642871582506466"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678795.5017762,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.449575424194336
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.644190788269043,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "9d000d2a7091619a",
+   "case_index": 72,
+   "params": {
+    "n": 19922944
+   },
+   "problem_size": 19922944,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 77824,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     8192,
+     7680,
+     7680,
+     7680,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 14
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 77824,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       8192,
+       7680,
+       7680,
+       7680,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 14
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 77824,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       8192,
+       7680,
+       7680,
+       7680,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 14
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 77824,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       8192,
+       7680,
+       7680,
+       7680,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 14
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.13085566666666668,
+   "latency_ms_samples": [
+    0.130773,
+    0.130743,
+    0.131051
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.130773,
+     0.130743,
+     0.131051
+    ],
+    "mean_ms": 0.13085566666666668,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case072_a9110624_t0",
+     "case072_a9110624_t1",
+     "case072_a9110624_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.130773,
+      "union_ms": 0.130773,
+      "span_ms": 0.130773,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "840369977193847"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.130743,
+      "union_ms": 0.130743,
+      "span_ms": 0.130743,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "840369977193847"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.131051,
+      "union_ms": 0.131051,
+      "span_ms": 0.131051,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "840369977193847"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678800.2467096,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4549775123596191
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.667685031890869,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "7b693d62eac59dba",
+   "case_index": 76,
+   "params": {
+    "n": 20971520
+   },
+   "problem_size": 20971520,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "cols_per_program": 81920,
+    "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+    "head_ramp_start": 2048,
+    "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+    "max_tile_free_elems": 8192,
+    "mid_align": 512,
+    "partitions": 128,
+    "prefetch_tiles": 5,
+    "programs": 2,
+    "sbuf_ring_slots": 8,
+    "tail_ramp_end": 512,
+    "tile_widths": [
+     2048,
+     4096,
+     8192,
+     8192,
+     8192,
+     7168,
+     7168,
+     7168,
+     7168,
+     6656,
+     8192,
+     4096,
+     2048,
+     1024,
+     512
+    ],
+    "tiles_per_program": 15
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "cols_per_program": 81920,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7168,
+       7168,
+       7168,
+       7168,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 15
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "cols_per_program": 81920,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7168,
+       7168,
+       7168,
+       7168,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 15
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "cols_per_program": 81920,
+      "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+      "head_ramp_start": 2048,
+      "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+      "max_tile_free_elems": 8192,
+      "mid_align": 512,
+      "partitions": 128,
+      "prefetch_tiles": 5,
+      "programs": 2,
+      "sbuf_ring_slots": 8,
+      "tail_ramp_end": 512,
+      "tile_widths": [
+       2048,
+       4096,
+       8192,
+       8192,
+       8192,
+       7168,
+       7168,
+       7168,
+       7168,
+       6656,
+       8192,
+       4096,
+       2048,
+       1024,
+       512
+      ],
+      "tiles_per_program": 15
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.13693266666666667,
+   "latency_ms_samples": [
+    0.136612,
+    0.137509,
+    0.136677
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.136612,
+     0.137509,
+     0.136677
+    ],
+    "mean_ms": 0.13693266666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case076_c5335b6e_t0",
+     "case076_c5335b6e_t1",
+     "case076_c5335b6e_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.136612,
+      "union_ms": 0.136612,
+      "span_ms": 0.136612,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "471661311499045"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.137509,
+      "union_ms": 0.137509,
+      "span_ms": 0.137509,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "471661311499045"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.136677,
+      "union_ms": 0.136677,
+      "span_ms": 0.136677,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "471661311499045"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791678805.013928,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4658877849578857
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.725156784057617,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call",
+      "nki_kernel_global"
+     ]
+    }
+   ]
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 20,
+ "valid_cases": 20,
+ "latency_ms_geomean": 0.06951068076764276,
+ "first_failing_case": null,
+ "suite_stopped": null,
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 161,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "cols_per_program": 4096,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    1536,
+    512
+   ],
+   "tiles_per_program": 3
+  },
+  {
+   "cols_per_program": 8192,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    512,
+    1024,
+    512
+   ],
+   "tiles_per_program": 5
+  },
+  {
+   "cols_per_program": 12288,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    4608,
+    1024,
+    512
+   ],
+   "tiles_per_program": 5
+  },
+  {
+   "cols_per_program": 16384,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    4608,
+    4096,
+    1024,
+    512
+   ],
+   "tiles_per_program": 6
+  },
+  {
+   "cols_per_program": 20480,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    2560,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 7
+  },
+  {
+   "cols_per_program": 24576,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    6656,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 7
+  },
+  {
+   "cols_per_program": 28672,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    5632,
+    5120,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 8
+  },
+  {
+   "cols_per_program": 32768,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    2560,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 9
+  },
+  {
+   "cols_per_program": 36864,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    6656,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 9
+  },
+  {
+   "cols_per_program": 40960,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    5632,
+    5120,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 10
+  },
+  {
+   "cols_per_program": 45056,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    7680,
+    7168,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 10
+  },
+  {
+   "cols_per_program": 49152,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    2560,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 11
+  },
+  {
+   "cols_per_program": 53248,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    6656,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 11
+  },
+  {
+   "cols_per_program": 57344,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    5632,
+    5120,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 12
+  },
+  {
+   "cols_per_program": 61440,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    7680,
+    7168,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 12
+  },
+  {
+   "cols_per_program": 65536,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    6656,
+    6144,
+    6144,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 13
+  },
+  {
+   "cols_per_program": 69632,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    7680,
+    7680,
+    7680,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 13
+  },
+  {
+   "cols_per_program": 73728,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    7168,
+    6656,
+    6656,
+    6656,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 14
+  },
+  {
+   "cols_per_program": 77824,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    8192,
+    7680,
+    7680,
+    7680,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 14
+  },
+  {
+   "cols_per_program": 81920,
+   "compute": "VectorE max(x,0) in-place SBUF, graded-tile software-pipelined DMA ring",
+   "head_ramp_start": 2048,
+   "layout": "(programs, 128, n/(programs*128)) contiguous rows per partition",
+   "max_tile_free_elems": 8192,
+   "mid_align": 512,
+   "partitions": 128,
+   "prefetch_tiles": 5,
+   "programs": 2,
+   "sbuf_ring_slots": 8,
+   "tail_ramp_end": 512,
+   "tile_widths": [
+    2048,
+    4096,
+    8192,
+    8192,
+    8192,
+    7168,
+    7168,
+    7168,
+    7168,
+    6656,
+    8192,
+    4096,
+    2048,
+    1024,
+    512
+   ],
+   "tiles_per_program": 15
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 96.78783297538757,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "690479104",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "691036160",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 1770941643,
+ "worker_rc": 0,
+ "worker_wall_s": 97.9022765159607,
+ "device_lock_wait_s": 1417.4523861408234,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/relu_4_1_revp2cpl"
+}

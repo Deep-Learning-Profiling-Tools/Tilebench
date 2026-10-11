@@ -1,0 +1,284 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/2",
+ "operator": "interleave",
+ "dtype": "fp16",
+ "cases": [
+  {
+   "case_id": "757560afa00a8137",
+   "case_index": 0,
+   "params": {
+    "n": 1000000
+   },
+   "problem_size": 1000000
+  },
+  {
+   "case_id": "b0a7b6f6560c1688",
+   "case_index": 4,
+   "params": {
+    "n": 2000000
+   },
+   "problem_size": 2000000
+  },
+  {
+   "case_id": "e0e2919a224416b5",
+   "case_index": 8,
+   "params": {
+    "n": 3000000
+   },
+   "problem_size": 3000000
+  },
+  {
+   "case_id": "e66d091e2941c784",
+   "case_index": 12,
+   "params": {
+    "n": 4000000
+   },
+   "problem_size": 4000000
+  },
+  {
+   "case_id": "84c472ec387d2591",
+   "case_index": 16,
+   "params": {
+    "n": 5000000
+   },
+   "problem_size": 5000000
+  },
+  {
+   "case_id": "dc19824de00e6aa6",
+   "case_index": 20,
+   "params": {
+    "n": 6000000
+   },
+   "problem_size": 6000000
+  },
+  {
+   "case_id": "25ea4ca217a018e5",
+   "case_index": 24,
+   "params": {
+    "n": 7000000
+   },
+   "problem_size": 7000000
+  },
+  {
+   "case_id": "b5383a8a268e2050",
+   "case_index": 28,
+   "params": {
+    "n": 8000000
+   },
+   "problem_size": 8000000
+  },
+  {
+   "case_id": "d9929bcb0594f0f3",
+   "case_index": 32,
+   "params": {
+    "n": 9000000
+   },
+   "problem_size": 9000000
+  },
+  {
+   "case_id": "6eeb4f68e53fb6ea",
+   "case_index": 36,
+   "params": {
+    "n": 10000000
+   },
+   "problem_size": 10000000
+  },
+  {
+   "case_id": "5e2d67ee0fba09b8",
+   "case_index": 40,
+   "params": {
+    "n": 11000000
+   },
+   "problem_size": 11000000
+  },
+  {
+   "case_id": "a84dfb0a1da83fc2",
+   "case_index": 44,
+   "params": {
+    "n": 12000000
+   },
+   "problem_size": 12000000
+  },
+  {
+   "case_id": "0c70d9ea1fe84017",
+   "case_index": 48,
+   "params": {
+    "n": 13000000
+   },
+   "problem_size": 13000000
+  },
+  {
+   "case_id": "fa40fd91df17fa25",
+   "case_index": 52,
+   "params": {
+    "n": 14000000
+   },
+   "problem_size": 14000000
+  },
+  {
+   "case_id": "e328683dee6a2a9f",
+   "case_index": 56,
+   "params": {
+    "n": 15000000
+   },
+   "problem_size": 15000000
+  },
+  {
+   "case_id": "b15aceac54e7faf3",
+   "case_index": 60,
+   "params": {
+    "n": 16000000
+   },
+   "problem_size": 16000000
+  },
+  {
+   "case_id": "4d1e806e02c46165",
+   "case_index": 64,
+   "params": {
+    "n": 17000000
+   },
+   "problem_size": 17000000
+  },
+  {
+   "case_id": "1e19687e09339638",
+   "case_index": 68,
+   "params": {
+    "n": 18000000
+   },
+   "problem_size": 18000000
+  },
+  {
+   "case_id": "3c44cfad60e83687",
+   "case_index": 72,
+   "params": {
+    "n": 19000000
+   },
+   "problem_size": 19000000
+  },
+  {
+   "case_id": "338d5bb14514b7d5",
+   "case_index": 76,
+   "params": {
+    "n": 20000000
+   },
+   "problem_size": 20000000
+  }
+ ],
+ "dsl": "nki",
+ "device": "Trn2",
+ "arch": "trainium2",
+ "source_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/interleave_1_1_rx9svzzq/impl_nki.py",
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/interleave_1_1_rx9svzzq",
+ "atol": 0.001,
+ "rtol": 0.001,
+ "tolerance_source": "config.verify+dtype_default",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "interleave",
+  "contract_revision": 2,
+  "required_stages": [
+   {
+    "id": "output_alloc",
+    "description": "Allocate the (2N,) output of A's dtype inside run()."
+   },
+   {
+    "id": "interleave_copy",
+    "description": "One logical traversal reading each element of A and B once and writing each element of OUT once with OUT[2i]=A[i], OUT[2i+1]=B[i]; the number of launches is a mapping choice."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "\\[\\s*[01]\\s*::\\s*2\\s*\\]\\s*=",
+    "message": "strided slice assignment performs the interleave in PyTorch",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.repeat_interleave\\(",
+    "message": "torch.repeat_interleave computes the interleave",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.(stack|cat)\\(",
+    "message": "torch.stack/torch.cat on the inputs computes the interleave in PyTorch",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.(flatten|view|reshape)\\(\\s*-?1\\s*\\)",
+    "message": "flatten/view after a PyTorch stack would be a torch-side interleave",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.copy_\\(|torch\\.clone\\(|\\.clone\\(\\)",
+    "message": "PyTorch copy of an input or output",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "tl\\.store",
+     "ct\\.store",
+     "store_offset",
+     "T\\.copy",
+     "nl\\.store",
+     "nisa\\."
+    ],
+    "message": "a device-side store of the interleaved tile",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "@triton\\.jit",
+     "@ct\\.kernel",
+     "@tilelang\\.jit",
+     "T\\.prim_func",
+     "nki\\.jit"
+    ],
+    "message": "a kernel definition",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty",
+   "torch.cuda.current_stream"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none: fresh (2N,) tensor allocated inside run()"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "All device work launched by run() is counted (the interleave launch(es)); the output allocation call and metadata reads are host work and not GPU time. No prepacked inputs, no cross-call cache."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "timing_error",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "eager",
+ "seed": 978840420,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "e62697676b75436e3570",
+  "round": 1,
+  "attempt": 1
+ }
+}

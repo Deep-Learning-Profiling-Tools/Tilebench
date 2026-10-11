@@ -1,0 +1,4451 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "valid",
+ "stages": {
+  "import_compile": {
+   "started": 1791650932.9493668,
+   "ok": true,
+   "elapsed_s": 0.003255605697631836
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": null,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "63956a8cf18f5d40002e",
+  "round": 1,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "6f49890a5ea2c962",
+   "case_index": 0,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 16
+   },
+   "problem_size": 75497472,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 1,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 18,
+    "psum_cols": 144,
+    "rows_per_block": 8,
+    "rows_per_psum_chunk": 8
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 1,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 18,
+      "psum_cols": 144,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 1,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 18,
+      "psum_cols": 144,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 1,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 18,
+      "psum_cols": 144,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.024454,
+   "latency_ms_samples": [
+    0.024328,
+    0.024839,
+    0.024195
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.024328,
+     0.024839,
+     0.024195
+    ],
+    "mean_ms": 0.024454,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_9e6e3853_t0",
+     "case000_9e6e3853_t1",
+     "case000_9e6e3853_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024328,
+      "union_ms": 0.024328,
+      "span_ms": 0.024328,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "610033062656641"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024839,
+      "union_ms": 0.024839,
+      "span_ms": 0.024839,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "610033062656641"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.024195,
+      "union_ms": 0.024195,
+      "span_ms": 0.024195,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "610033062656641"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650932.953251,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.0988352298736572
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.888219594955444,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "69bf9e7a05c1d63a",
+   "case_index": 2,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 32
+   },
+   "problem_size": 301989888,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 2,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 34,
+    "psum_cols": 272,
+    "rows_per_block": 8,
+    "rows_per_psum_chunk": 8
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 2,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 34,
+      "psum_cols": 272,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 2,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 34,
+      "psum_cols": 272,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 2,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 34,
+      "psum_cols": 272,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.028447666666666666,
+   "latency_ms_samples": [
+    0.02826,
+    0.028597,
+    0.028486
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.02826,
+     0.028597,
+     0.028486
+    ],
+    "mean_ms": 0.028447666666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case002_5f92fd52_t0",
+     "case002_5f92fd52_t1",
+     "case002_5f92fd52_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.02826,
+      "union_ms": 0.02826,
+      "span_ms": 0.02826,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1070899314687230"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.028597,
+      "union_ms": 0.028597,
+      "span_ms": 0.028597,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1070899314687230"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.028486,
+      "union_ms": 0.028486,
+      "span_ms": 0.028486,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1070899314687230"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650938.9421036,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3563101291656494
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.012638568878174,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "69fad2b8d52a6f1f",
+   "case_index": 4,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 48
+   },
+   "problem_size": 679477248,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 3,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 50,
+    "psum_cols": 400,
+    "rows_per_block": 8,
+    "rows_per_psum_chunk": 8
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 3,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 50,
+      "psum_cols": 400,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 3,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 50,
+      "psum_cols": 400,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 3,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 50,
+      "psum_cols": 400,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 8
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.03212633333333333,
+   "latency_ms_samples": [
+    0.032149,
+    0.03227,
+    0.03196
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.032149,
+     0.03227,
+     0.03196
+    ],
+    "mean_ms": 0.03212633333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case004_bcd6ae6a_t0",
+     "case004_bcd6ae6a_t1",
+     "case004_bcd6ae6a_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.032149,
+      "union_ms": 0.032149,
+      "span_ms": 0.032149,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "592965752185457"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.03227,
+      "union_ms": 0.03227,
+      "span_ms": 0.03227,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "592965752185457"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.03196,
+      "union_ms": 0.03196,
+      "span_ms": 0.03196,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "592965752185457"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650943.054226,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.3855400085449219
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 3.9282114505767822,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3ce84d5bbeb1507a",
+   "case_index": 6,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 64
+   },
+   "problem_size": 1207959552,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 66,
+    "psum_cols": 462,
+    "rows_per_block": 8,
+    "rows_per_psum_chunk": 7
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 66,
+      "psum_cols": 462,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 7
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 66,
+      "psum_cols": 462,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 7
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 66,
+      "psum_cols": 462,
+      "rows_per_block": 8,
+      "rows_per_psum_chunk": 7
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.03647366666666666,
+   "latency_ms_samples": [
+    0.036578,
+    0.036432,
+    0.036411
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.036578,
+     0.036432,
+     0.036411
+    ],
+    "mean_ms": 0.03647366666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case006_a129b522_t0",
+     "case006_a129b522_t1",
+     "case006_a129b522_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.036578,
+      "union_ms": 0.036578,
+      "span_ms": 0.036578,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "239362932390746"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.036432,
+      "union_ms": 0.036432,
+      "span_ms": 0.036432,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "239362932390746"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.036411,
+      "union_ms": 0.036411,
+      "span_ms": 0.036411,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "239362932390746"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650947.0810287,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.5010733604431152
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.0353100299835205,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "f7393f88b0246d5e",
+   "case_index": 8,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 80
+   },
+   "problem_size": 1887436800,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 82,
+    "psum_cols": 492,
+    "rows_per_block": 10,
+    "rows_per_psum_chunk": 6
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 82,
+      "psum_cols": 492,
+      "rows_per_block": 10,
+      "rows_per_psum_chunk": 6
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 82,
+      "psum_cols": 492,
+      "rows_per_block": 10,
+      "rows_per_psum_chunk": 6
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 82,
+      "psum_cols": 492,
+      "rows_per_block": 10,
+      "rows_per_psum_chunk": 6
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.040342666666666666,
+   "latency_ms_samples": [
+    0.040166,
+    0.040703,
+    0.040159
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.040166,
+     0.040703,
+     0.040159
+    ],
+    "mean_ms": 0.040342666666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case008_9b025984_t0",
+     "case008_9b025984_t1",
+     "case008_9b025984_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.040166,
+      "union_ms": 0.040166,
+      "span_ms": 0.040166,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "963307095308258"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.040703,
+      "union_ms": 0.040703,
+      "span_ms": 0.040703,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "963307095308258"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.040159,
+      "union_ms": 0.040159,
+      "span_ms": 0.040159,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "963307095308258"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650951.2150235,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.4944441318511963
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.055130243301392,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "bb7b13a3bd92f1a2",
+   "case_index": 10,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 96
+   },
+   "problem_size": 2717908992,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 98,
+    "psum_cols": 490,
+    "rows_per_block": 12,
+    "rows_per_psum_chunk": 5
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 98,
+      "psum_cols": 490,
+      "rows_per_block": 12,
+      "rows_per_psum_chunk": 5
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 98,
+      "psum_cols": 490,
+      "rows_per_block": 12,
+      "rows_per_psum_chunk": 5
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 98,
+      "psum_cols": 490,
+      "rows_per_block": 12,
+      "rows_per_psum_chunk": 5
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.047023666666666665,
+   "latency_ms_samples": [
+    0.047167,
+    0.046965,
+    0.046939
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.047167,
+     0.046965,
+     0.046939
+    ],
+    "mean_ms": 0.047023666666666665,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case010_738ca1af_t0",
+     "case010_738ca1af_t1",
+     "case010_738ca1af_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.047167,
+      "union_ms": 0.047167,
+      "span_ms": 0.047167,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "665631432923188"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.046965,
+      "union_ms": 0.046965,
+      "span_ms": 0.046965,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "665631432923188"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.046939,
+      "union_ms": 0.046939,
+      "span_ms": 0.046939,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "665631432923188"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650955.3677862,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.5494616031646729
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.185481786727905,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "aa2d46c983ac39c7",
+   "case_index": 12,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 112
+   },
+   "problem_size": 3699376128,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 114,
+    "psum_cols": 456,
+    "rows_per_block": 14,
+    "rows_per_psum_chunk": 4
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 114,
+      "psum_cols": 456,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 4
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 114,
+      "psum_cols": 456,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 4
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 114,
+      "psum_cols": 456,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 4
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.05594866666666667,
+   "latency_ms_samples": [
+    0.053597,
+    0.057288,
+    0.056961
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.053597,
+     0.057288,
+     0.056961
+    ],
+    "mean_ms": 0.05594866666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_df524874_t0",
+     "case012_df524874_t1",
+     "case012_df524874_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.053597,
+      "union_ms": 0.053597,
+      "span_ms": 0.053597,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1103200072591812"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.057288,
+      "union_ms": 0.057288,
+      "span_ms": 0.057288,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1103200072591812"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.056961,
+      "union_ms": 0.056961,
+      "span_ms": 0.056961,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1103200072591812"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650959.6530967,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.6327190399169922
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.218852996826172,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "e151efaef12fba4f",
+   "case_index": 14,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 128
+   },
+   "problem_size": 4831838208,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 130,
+    "psum_cols": 390,
+    "rows_per_block": 16,
+    "rows_per_psum_chunk": 3
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 130,
+      "psum_cols": 390,
+      "rows_per_block": 16,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 130,
+      "psum_cols": 390,
+      "rows_per_block": 16,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 130,
+      "psum_cols": 390,
+      "rows_per_block": 16,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.06406766666666668,
+   "latency_ms_samples": [
+    0.067478,
+    0.062397,
+    0.062328
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.067478,
+     0.062397,
+     0.062328
+    ],
+    "mean_ms": 0.06406766666666668,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case014_da94cc4f_t0",
+     "case014_da94cc4f_t1",
+     "case014_da94cc4f_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.067478,
+      "union_ms": 0.067478,
+      "span_ms": 0.067478,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "22411328305087"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.062397,
+      "union_ms": 0.062397,
+      "span_ms": 0.062397,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "22411328305087"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.062328,
+      "union_ms": 0.062328,
+      "span_ms": 0.062328,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "22411328305087"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650963.972781,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.7546939849853516
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.381728172302246,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "3dd1630135695c0d",
+   "case_index": 16,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 144
+   },
+   "problem_size": 6115295232,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 146,
+    "psum_cols": 438,
+    "rows_per_block": 18,
+    "rows_per_psum_chunk": 3
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 146,
+      "psum_cols": 438,
+      "rows_per_block": 18,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 146,
+      "psum_cols": 438,
+      "rows_per_block": 18,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 146,
+      "psum_cols": 438,
+      "rows_per_block": 18,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.075569,
+   "latency_ms_samples": [
+    0.073667,
+    0.07308,
+    0.07996
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.073667,
+     0.07308,
+     0.07996
+    ],
+    "mean_ms": 0.075569,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case016_bfc29b8c_t0",
+     "case016_bfc29b8c_t1",
+     "case016_bfc29b8c_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.073667,
+      "union_ms": 0.073667,
+      "span_ms": 0.073667,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "414730945992748"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.07308,
+      "union_ms": 0.07308,
+      "span_ms": 0.07308,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "414730945992748"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.07996,
+      "union_ms": 0.07996,
+      "span_ms": 0.07996,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "414730945992748"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650968.4526823,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.7599234580993652
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.440827131271362,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "7547df19f7f60b74",
+   "case_index": 18,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 160
+   },
+   "problem_size": 7549747200,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 162,
+    "psum_cols": 486,
+    "rows_per_block": 20,
+    "rows_per_psum_chunk": 3
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 162,
+      "psum_cols": 486,
+      "rows_per_block": 20,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 162,
+      "psum_cols": 486,
+      "rows_per_block": 20,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 162,
+      "psum_cols": 486,
+      "rows_per_block": 20,
+      "rows_per_psum_chunk": 3
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.08885066666666668,
+   "latency_ms_samples": [
+    0.093941,
+    0.086076,
+    0.086535
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.093941,
+     0.086076,
+     0.086535
+    ],
+    "mean_ms": 0.08885066666666668,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case018_e8083e29_t0",
+     "case018_e8083e29_t1",
+     "case018_e8083e29_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.093941,
+      "union_ms": 0.093941,
+      "span_ms": 0.093941,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "132633485456804"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.086076,
+      "union_ms": 0.086076,
+      "span_ms": 0.086076,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "132633485456804"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.086535,
+      "union_ms": 0.086535,
+      "span_ms": 0.086535,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "132633485456804"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650972.9914117,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.8432502746582031
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.528228282928467,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "930d0053823b8892",
+   "case_index": 20,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 176
+   },
+   "problem_size": 9135194112,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 4,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 178,
+    "psum_cols": 356,
+    "rows_per_block": 22,
+    "rows_per_psum_chunk": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 178,
+      "psum_cols": 356,
+      "rows_per_block": 22,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 178,
+      "psum_cols": 356,
+      "rows_per_block": 22,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 4,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 178,
+      "psum_cols": 356,
+      "rows_per_block": 22,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.10333633333333332,
+   "latency_ms_samples": [
+    0.106771,
+    0.096315,
+    0.106923
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.106771,
+     0.096315,
+     0.106923
+    ],
+    "mean_ms": 0.10333633333333332,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case020_df462448_t0",
+     "case020_df462448_t1",
+     "case020_df462448_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.106771,
+      "union_ms": 0.106771,
+      "span_ms": 0.106771,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "460972563021216"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.096315,
+      "union_ms": 0.096315,
+      "span_ms": 0.096315,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "460972563021216"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.106923,
+      "union_ms": 0.106923,
+      "span_ms": 0.106923,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "460972563021216"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650977.6200533,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.087183713912964
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.840492010116577,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "dfc0984b74a533b0",
+   "case_index": 22,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 192
+   },
+   "problem_size": 10871635968,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 5,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 194,
+    "psum_cols": 388,
+    "rows_per_block": 20,
+    "rows_per_psum_chunk": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 5,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 194,
+      "psum_cols": 388,
+      "rows_per_block": 20,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 5,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 194,
+      "psum_cols": 388,
+      "rows_per_block": 20,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 5,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 194,
+      "psum_cols": 388,
+      "rows_per_block": 20,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.11587833333333332,
+   "latency_ms_samples": [
+    0.120179,
+    0.119889,
+    0.107567
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.120179,
+     0.119889,
+     0.107567
+    ],
+    "mean_ms": 0.11587833333333332,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case022_f5388395_t0",
+     "case022_f5388395_t1",
+     "case022_f5388395_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.120179,
+      "union_ms": 0.120179,
+      "span_ms": 0.120179,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "893213939407780"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.119889,
+      "union_ms": 0.119889,
+      "span_ms": 0.119889,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "893213939407780"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.107567,
+      "union_ms": 0.107567,
+      "span_ms": 0.107567,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "893213939407780"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650982.5607417,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.142486810684204
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.912236928939819,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "19f2e702b4e97232",
+   "case_index": 24,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 208
+   },
+   "problem_size": 12759072768,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 6,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 210,
+    "psum_cols": 420,
+    "rows_per_block": 18,
+    "rows_per_psum_chunk": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 6,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 210,
+      "psum_cols": 420,
+      "rows_per_block": 18,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 6,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 210,
+      "psum_cols": 420,
+      "rows_per_block": 18,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 6,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 210,
+      "psum_cols": 420,
+      "rows_per_block": 18,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.13371433333333332,
+   "latency_ms_samples": [
+    0.133574,
+    0.133535,
+    0.134034
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.133574,
+     0.133535,
+     0.134034
+    ],
+    "mean_ms": 0.13371433333333332,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case024_5b6b7c20_t0",
+     "case024_5b6b7c20_t1",
+     "case024_5b6b7c20_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.133574,
+      "union_ms": 0.133574,
+      "span_ms": 0.133574,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "117970706224636"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.133535,
+      "union_ms": 0.133535,
+      "span_ms": 0.133535,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "117970706224636"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.134034,
+      "union_ms": 0.134034,
+      "span_ms": 0.134034,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "117970706224636"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650987.575143,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.248289108276367
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.065276861190796,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "7e477afae200f1d3",
+   "case_index": 26,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 224
+   },
+   "problem_size": 14797504512,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 7,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 226,
+    "psum_cols": 452,
+    "rows_per_block": 16,
+    "rows_per_psum_chunk": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 7,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 226,
+      "psum_cols": 452,
+      "rows_per_block": 16,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 7,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 226,
+      "psum_cols": 452,
+      "rows_per_block": 16,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 7,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 226,
+      "psum_cols": 452,
+      "rows_per_block": 16,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.13747233333333334,
+   "latency_ms_samples": [
+    0.131471,
+    0.131198,
+    0.149748
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.131471,
+     0.131198,
+     0.149748
+    ],
+    "mean_ms": 0.13747233333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case026_8accd1df_t0",
+     "case026_8accd1df_t1",
+     "case026_8accd1df_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.131471,
+      "union_ms": 0.131471,
+      "span_ms": 0.131471,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "778182481766504"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.131198,
+      "union_ms": 0.131198,
+      "span_ms": 0.131198,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "778182481766504"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.149748,
+      "union_ms": 0.149748,
+      "span_ms": 0.149748,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "778182481766504"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650992.7408807,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.294323682785034
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.2209460735321045,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d6cd48094de1fde2",
+   "case_index": 28,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 240
+   },
+   "problem_size": 16986931200,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 8,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 242,
+    "psum_cols": 484,
+    "rows_per_block": 15,
+    "rows_per_psum_chunk": 2
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 8,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 242,
+      "psum_cols": 484,
+      "rows_per_block": 15,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 8,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 242,
+      "psum_cols": 484,
+      "rows_per_block": 15,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 8,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 242,
+      "psum_cols": 484,
+      "rows_per_block": 15,
+      "rows_per_psum_chunk": 2
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.166238,
+   "latency_ms_samples": [
+    0.165841,
+    0.16654,
+    0.166333
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.165841,
+     0.16654,
+     0.166333
+    ],
+    "mean_ms": 0.166238,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case028_10a393ea_t0",
+     "case028_10a393ea_t1",
+     "case028_10a393ea_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.165841,
+      "union_ms": 0.165841,
+      "span_ms": 0.165841,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196336639033256"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.16654,
+      "union_ms": 0.16654,
+      "span_ms": 0.16654,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196336639033256"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.166333,
+      "union_ms": 0.166333,
+      "span_ms": 0.166333,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "196336639033256"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791650998.0614672,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.463714122772217
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.294869661331177,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "44283c2e52979e2e",
+   "case_index": 30,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 256
+   },
+   "problem_size": 19327352832,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 9,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 258,
+    "psum_cols": 258,
+    "rows_per_block": 15,
+    "rows_per_psum_chunk": 1
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 9,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 258,
+      "psum_cols": 258,
+      "rows_per_block": 15,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 9,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 258,
+      "psum_cols": 258,
+      "rows_per_block": 15,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 9,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 258,
+      "psum_cols": 258,
+      "rows_per_block": 15,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.16872466666666666,
+   "latency_ms_samples": [
+    0.161032,
+    0.161149,
+    0.183993
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.161032,
+     0.161149,
+     0.183993
+    ],
+    "mean_ms": 0.16872466666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case030_d7309778_t0",
+     "case030_d7309778_t1",
+     "case030_d7309778_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.161032,
+      "union_ms": 0.161032,
+      "span_ms": 0.161032,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "278919650434163"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.161149,
+      "union_ms": 0.161149,
+      "span_ms": 0.161149,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "278919650434163"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.183993,
+      "union_ms": 0.183993,
+      "span_ms": 0.183993,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "278919650434163"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791651003.4568152,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.3901026248931885
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.193474054336548,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "1798c166bfc7615d",
+   "case_index": 32,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 272
+   },
+   "problem_size": 21818769408,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 10,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 274,
+    "psum_cols": 274,
+    "rows_per_block": 14,
+    "rows_per_psum_chunk": 1
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 10,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 274,
+      "psum_cols": 274,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 10,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 274,
+      "psum_cols": 274,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 10,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 274,
+      "psum_cols": 274,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.202523,
+   "latency_ms_samples": [
+    0.202694,
+    0.202623,
+    0.202252
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.202694,
+     0.202623,
+     0.202252
+    ],
+    "mean_ms": 0.202523,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case032_a1a15a81_t0",
+     "case032_a1a15a81_t1",
+     "case032_a1a15a81_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.202694,
+      "union_ms": 0.202694,
+      "span_ms": 0.202694,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "240288381203634"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.202623,
+      "union_ms": 0.202623,
+      "span_ms": 0.202623,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "240288381203634"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.202252,
+      "union_ms": 0.202252,
+      "span_ms": 0.202252,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "240288381203634"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791651009.7495813,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.540663480758667
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.452787637710571,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "9a520e8514a32096",
+   "case_index": 34,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 288
+   },
+   "problem_size": 24461180928,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 11,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 290,
+    "psum_cols": 290,
+    "rows_per_block": 14,
+    "rows_per_psum_chunk": 1
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 11,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 290,
+      "psum_cols": 290,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 11,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 290,
+      "psum_cols": 290,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 11,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 290,
+      "psum_cols": 290,
+      "rows_per_block": 14,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.19323666666666664,
+   "latency_ms_samples": [
+    0.192519,
+    0.194191,
+    0.193
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.192519,
+     0.194191,
+     0.193
+    ],
+    "mean_ms": 0.19323666666666664,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case034_caec0762_t0",
+     "case034_caec0762_t1",
+     "case034_caec0762_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.192519,
+      "union_ms": 0.192519,
+      "span_ms": 0.192519,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "833939575466471"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.194191,
+      "union_ms": 0.194191,
+      "span_ms": 0.194191,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "833939575466471"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.193,
+      "union_ms": 0.193,
+      "span_ms": 0.193,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "833939575466471"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791651016.3025987,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.674255609512329
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.650830984115601,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "2def1d64f593dec5",
+   "case_index": 36,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 304
+   },
+   "problem_size": 27254587392,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 12,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 306,
+    "psum_cols": 306,
+    "rows_per_block": 13,
+    "rows_per_psum_chunk": 1
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 12,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 306,
+      "psum_cols": 306,
+      "rows_per_block": 13,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 12,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 306,
+      "psum_cols": 306,
+      "rows_per_block": 13,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 12,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 306,
+      "psum_cols": 306,
+      "rows_per_block": 13,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.22043466666666667,
+   "latency_ms_samples": [
+    0.211986,
+    0.211411,
+    0.237907
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.211986,
+     0.211411,
+     0.237907
+    ],
+    "mean_ms": 0.22043466666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case036_cf0c6899_t0",
+     "case036_cf0c6899_t1",
+     "case036_cf0c6899_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.211986,
+      "union_ms": 0.211986,
+      "span_ms": 0.211986,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1122344957347144"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.211411,
+      "union_ms": 0.211411,
+      "span_ms": 0.211411,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1122344957347144"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.237907,
+      "union_ms": 0.237907,
+      "span_ms": 0.237907,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1122344957347144"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791651023.0544271,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.8097383975982666
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.852423906326294,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "510c4f3760c7000d",
+   "case_index": 38,
+   "params": {
+    "batch": 1,
+    "in_channels": 128,
+    "out_channels": 128,
+    "kernel_size": 3,
+    "stride": 1,
+    "padding": 1,
+    "groups": 1,
+    "H": 320
+   },
+   "problem_size": 30198988800,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "algorithm": "implicit_gemm_flat_shift",
+    "blocks_per_core_planned": 13,
+    "dma_partition_group": 32,
+    "n_programs_assumed": 2,
+    "padded_width": 322,
+    "psum_cols": 322,
+    "rows_per_block": 13,
+    "rows_per_psum_chunk": 1
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 13,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 322,
+      "psum_cols": 322,
+      "rows_per_block": 13,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 13,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 322,
+      "psum_cols": 322,
+      "rows_per_block": 13,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "algorithm": "implicit_gemm_flat_shift",
+      "blocks_per_core_planned": 13,
+      "dma_partition_group": 32,
+      "n_programs_assumed": 2,
+      "padded_width": 322,
+      "psum_cols": 322,
+      "rows_per_block": 13,
+      "rows_per_psum_chunk": 1
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.24864133333333335,
+   "latency_ms_samples": [
+    0.25744,
+    0.23137,
+    0.257114
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.25744,
+     0.23137,
+     0.257114
+    ],
+    "mean_ms": 0.24864133333333335,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case038_41acf75c_t0",
+     "case038_41acf75c_t1",
+     "case038_41acf75c_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.25744,
+      "union_ms": 0.25744,
+      "span_ms": 0.25744,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "384548014487899"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.23137,
+      "union_ms": 0.23137,
+      "span_ms": 0.23137,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "384548014487899"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.257114,
+      "union_ms": 0.257114,
+      "span_ms": 0.257114,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "384548014487899"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791651030.00688,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.9110543727874756
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.949103355407715,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 20,
+ "valid_cases": 20,
+ "latency_ms_geomean": 0.08602729948502744,
+ "first_failing_case": null,
+ "suite_stopped": null,
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 161,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 1,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 18,
+   "psum_cols": 144,
+   "rows_per_block": 8,
+   "rows_per_psum_chunk": 8
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 2,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 34,
+   "psum_cols": 272,
+   "rows_per_block": 8,
+   "rows_per_psum_chunk": 8
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 3,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 50,
+   "psum_cols": 400,
+   "rows_per_block": 8,
+   "rows_per_psum_chunk": 8
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 66,
+   "psum_cols": 462,
+   "rows_per_block": 8,
+   "rows_per_psum_chunk": 7
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 82,
+   "psum_cols": 492,
+   "rows_per_block": 10,
+   "rows_per_psum_chunk": 6
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 98,
+   "psum_cols": 490,
+   "rows_per_block": 12,
+   "rows_per_psum_chunk": 5
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 114,
+   "psum_cols": 456,
+   "rows_per_block": 14,
+   "rows_per_psum_chunk": 4
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 130,
+   "psum_cols": 390,
+   "rows_per_block": 16,
+   "rows_per_psum_chunk": 3
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 146,
+   "psum_cols": 438,
+   "rows_per_block": 18,
+   "rows_per_psum_chunk": 3
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 162,
+   "psum_cols": 486,
+   "rows_per_block": 20,
+   "rows_per_psum_chunk": 3
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 4,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 178,
+   "psum_cols": 356,
+   "rows_per_block": 22,
+   "rows_per_psum_chunk": 2
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 5,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 194,
+   "psum_cols": 388,
+   "rows_per_block": 20,
+   "rows_per_psum_chunk": 2
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 6,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 210,
+   "psum_cols": 420,
+   "rows_per_block": 18,
+   "rows_per_psum_chunk": 2
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 7,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 226,
+   "psum_cols": 452,
+   "rows_per_block": 16,
+   "rows_per_psum_chunk": 2
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 8,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 242,
+   "psum_cols": 484,
+   "rows_per_block": 15,
+   "rows_per_psum_chunk": 2
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 9,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 258,
+   "psum_cols": 258,
+   "rows_per_block": 15,
+   "rows_per_psum_chunk": 1
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 10,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 274,
+   "psum_cols": 274,
+   "rows_per_block": 14,
+   "rows_per_psum_chunk": 1
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 11,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 290,
+   "psum_cols": 290,
+   "rows_per_block": 14,
+   "rows_per_psum_chunk": 1
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 12,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 306,
+   "psum_cols": 306,
+   "rows_per_block": 13,
+   "rows_per_psum_chunk": 1
+  },
+  {
+   "algorithm": "implicit_gemm_flat_shift",
+   "blocks_per_core_planned": 13,
+   "dma_partition_group": 32,
+   "n_programs_assumed": 2,
+   "padded_width": 322,
+   "psum_cols": 322,
+   "rows_per_block": 13,
+   "rows_per_psum_chunk": 1
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 112.84021663665771,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "469037056",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "470732800",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 3687932,
+ "worker_rc": 0,
+ "worker_wall_s": 113.97269630432129,
+ "device_lock_wait_s": 44.42574715614319,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/2d_conv_1_1_yctp1eu3",
+ "archive": {
+  "dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/base/Trn2/nki/claude/2d_conv/fp16/cs9697a5536da422/round_01/attempt_1/eval_0001/evaluation",
+  "files": [
+   "cases.jsonl",
+   "impl_nki.py",
+   "job.json",
+   "progress.json",
+   "result.json",
+   "worker_stderr.txt",
+   "worker_stdout.txt"
+  ]
+ },
+ "evaluation_revision": "eval_0001"
+}

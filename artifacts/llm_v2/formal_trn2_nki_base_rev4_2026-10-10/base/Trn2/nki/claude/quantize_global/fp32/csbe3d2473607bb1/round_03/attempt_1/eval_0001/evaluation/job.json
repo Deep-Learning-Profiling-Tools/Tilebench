@@ -1,0 +1,289 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/2",
+ "operator": "quantize_global",
+ "dtype": "fp32",
+ "cases": [
+  {
+   "case_id": "eededd4155c7837b",
+   "case_index": 0,
+   "params": {
+    "n": 1048576
+   },
+   "problem_size": 1048576
+  },
+  {
+   "case_id": "b7ceacb38889b2e7",
+   "case_index": 1,
+   "params": {
+    "n": 2097152
+   },
+   "problem_size": 2097152
+  },
+  {
+   "case_id": "17135f4bab048315",
+   "case_index": 2,
+   "params": {
+    "n": 3145728
+   },
+   "problem_size": 3145728
+  },
+  {
+   "case_id": "3c5e94980465a6fc",
+   "case_index": 3,
+   "params": {
+    "n": 4194304
+   },
+   "problem_size": 4194304
+  },
+  {
+   "case_id": "0f1fe78ba77aae85",
+   "case_index": 4,
+   "params": {
+    "n": 5242880
+   },
+   "problem_size": 5242880
+  },
+  {
+   "case_id": "21529283c3d3feb2",
+   "case_index": 5,
+   "params": {
+    "n": 6291456
+   },
+   "problem_size": 6291456
+  },
+  {
+   "case_id": "0422224599713414",
+   "case_index": 6,
+   "params": {
+    "n": 7340032
+   },
+   "problem_size": 7340032
+  },
+  {
+   "case_id": "33aef94a9a20f3c7",
+   "case_index": 7,
+   "params": {
+    "n": 8388608
+   },
+   "problem_size": 8388608
+  },
+  {
+   "case_id": "a9dc21397e9dc22f",
+   "case_index": 8,
+   "params": {
+    "n": 9437184
+   },
+   "problem_size": 9437184
+  },
+  {
+   "case_id": "e77f53e6a4458506",
+   "case_index": 9,
+   "params": {
+    "n": 10485760
+   },
+   "problem_size": 10485760
+  },
+  {
+   "case_id": "d459a9f1569c9727",
+   "case_index": 10,
+   "params": {
+    "n": 11534336
+   },
+   "problem_size": 11534336
+  },
+  {
+   "case_id": "28793315c0c1fce4",
+   "case_index": 11,
+   "params": {
+    "n": 12582912
+   },
+   "problem_size": 12582912
+  },
+  {
+   "case_id": "c0e9e3477d86f287",
+   "case_index": 12,
+   "params": {
+    "n": 13631488
+   },
+   "problem_size": 13631488
+  },
+  {
+   "case_id": "4b80f61479773a72",
+   "case_index": 13,
+   "params": {
+    "n": 14680064
+   },
+   "problem_size": 14680064
+  },
+  {
+   "case_id": "79376d39e488132f",
+   "case_index": 14,
+   "params": {
+    "n": 15728640
+   },
+   "problem_size": 15728640
+  },
+  {
+   "case_id": "a60d2838b78e1d9b",
+   "case_index": 15,
+   "params": {
+    "n": 16777216
+   },
+   "problem_size": 16777216
+  },
+  {
+   "case_id": "951a2d1e67d4d71f",
+   "case_index": 16,
+   "params": {
+    "n": 17825792
+   },
+   "problem_size": 17825792
+  },
+  {
+   "case_id": "b067c893b5e388c9",
+   "case_index": 17,
+   "params": {
+    "n": 18874368
+   },
+   "problem_size": 18874368
+  },
+  {
+   "case_id": "2a64816831ff54fc",
+   "case_index": 18,
+   "params": {
+    "n": 19922944
+   },
+   "problem_size": 19922944
+  },
+  {
+   "case_id": "9868e0d972ac481a",
+   "case_index": 19,
+   "params": {
+    "n": 20971520
+   },
+   "problem_size": 20971520
+  }
+ ],
+ "dsl": "nki",
+ "device": "Trn2",
+ "arch": "trainium2",
+ "source_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/quantize_global_3_1_nqtaz2op/impl_nki.py",
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/quantize_global_3_1_nqtaz2op",
+ "atol": 1e-05,
+ "rtol": 1.3e-06,
+ "tolerance_source": "config.verify+dtype_default",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "quantize_global",
+  "contract_revision": 2,
+  "required_stages": [
+   {
+    "id": "allocate_output",
+    "description": "Allocate a fresh (n,) float16 output inside run()."
+   },
+   {
+    "id": "elementwise_convert",
+    "description": "One logical pass (the number of launches is a mapping choice) that reads each float32 element once, converts it to float16 (round-to-nearest-even) and stores it once at the same position; no reduction, scale or clamp."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "\\.to\\(\\s*torch\\.float16\\s*\\)|\\.to\\(\\s*dtype\\s*=\\s*torch\\.float16\\s*\\)|\\.half\\(\\)|\\.type\\(\\s*torch\\.(float16|HalfTensor|cuda\\.HalfTensor)",
+    "message": "The conversion must be performed by the kernel, not by a PyTorch cast.",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.copy_\\(|torch\\.clone\\(|\\.clone\\(\\)",
+    "message": "A host-side copy inside run() performs the conversion or an extra pass on the host.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "absmax|amax|torch\\.abs\\(|\\.abs\\(\\)|torch\\.max\\(|\\.max\\(\\)|torch\\.norm|scale|clamp|torch\\.round|torch\\.int8|int8|torch\\.quantize",
+    "message": "An absmax/scale/clamp/integer-quantisation step is not part of this operator; the reference is a bare fp32 -> fp16 cast.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "return\\s+x\\b|return\\s+x\\.",
+    "message": "Returning the input or a view/cast of it replaces the whole computation.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(",
+    "message": "No initialised scratch is part of this operator.",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "tl\\.float16",
+     "ct\\.float16",
+     "T\\.float16",
+     "nl\\.float16",
+     "float16",
+     "fp16",
+     "half"
+    ],
+    "message": "No float16 conversion target found inside the kernel.",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.store",
+     "ct\\.store",
+     "store_offset",
+     "T\\.copy",
+     "nl\\.store",
+     "nisa\\.dma_copy"
+    ],
+    "message": "No kernel-level store found; the conversion must be done by a kernel.",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty",
+   "torch.float16",
+   "torch.cuda.current_stream",
+   "Tensor.contiguous",
+   "Tensor.numel"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none; the returned (n,) float16 tensor must be freshly allocated inside run() and must not share storage with x"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "All device work launched by run() is counted (the conversion kernel launch(es)); host-side work (the output allocation call, the optional no-op contiguous() guard, metadata reads) is not GPU time. No absmax or scale pass exists; no cached state; no host-side cast or copy of x."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "timing_error",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "eager",
+ "seed": 386412099,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "7f206dd47106d942f7d9",
+  "round": 3,
+  "attempt": 1
+ }
+}

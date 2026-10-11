@@ -1,0 +1,5260 @@
+{
+ "schema": "tilebench-llm-v2-eval/3",
+ "status": "valid",
+ "stages": {
+  "import_compile": {
+   "started": 1791690477.013179,
+   "ok": true,
+   "elapsed_s": 0.0038232803344726562
+  },
+  "interface": {
+   "run": true,
+   "get_last_config": true
+  },
+  "autotuner_scan": {
+   "hits": []
+  },
+  "device": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  }
+ },
+ "diagnostic": null,
+ "identity": {
+  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+  "run_type": "formal",
+  "model": "claude",
+  "condition": "base",
+  "trajectory_id": "03540e9153c2ae052108",
+  "round": 5,
+  "attempt": 1
+ },
+ "expected_timing_mode": "eager",
+ "cases": [
+  {
+   "case_id": "f50bc54405654b60",
+   "case_index": 0,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 1024
+   },
+   "problem_size": 4194304,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 4,
+    "rows_per_partition_per_tile": 1,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 4,
+      "rows_per_partition_per_tile": 1,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 4,
+      "rows_per_partition_per_tile": 1,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 4,
+      "rows_per_partition_per_tile": 1,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.06800033333333333,
+   "latency_ms_samples": [
+    0.068588,
+    0.06812,
+    0.067293
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.068588,
+     0.06812,
+     0.067293
+    ],
+    "mean_ms": 0.06800033333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case000_8d04cb92_t0",
+     "case000_8d04cb92_t1",
+     "case000_8d04cb92_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.068588,
+      "union_ms": 0.068588,
+      "span_ms": 0.068588,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "892268614254890"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.06812,
+      "union_ms": 0.06812,
+      "span_ms": 0.06812,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "892268614254890"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.067293,
+      "union_ms": 0.067293,
+      "span_ms": 0.067293,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "892268614254890"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690477.017592,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.31481671333313
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.199364423751831,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "abc7cf8484057600",
+   "case_index": 2,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 2048
+   },
+   "problem_size": 8388608,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 8,
+    "rows_per_partition_per_tile": 1,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 8,
+      "rows_per_partition_per_tile": 1,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 8,
+      "rows_per_partition_per_tile": 1,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 8,
+      "rows_per_partition_per_tile": 1,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.114994,
+   "latency_ms_samples": [
+    0.115445,
+    0.115767,
+    0.11377
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.115445,
+     0.115767,
+     0.11377
+    ],
+    "mean_ms": 0.114994,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case002_a3a12dc5_t0",
+     "case002_a3a12dc5_t1",
+     "case002_a3a12dc5_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.115445,
+      "union_ms": 0.115445,
+      "span_ms": 0.115445,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "230121928278209"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.115767,
+      "union_ms": 0.115767,
+      "span_ms": 0.115767,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "230121928278209"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.11377,
+      "union_ms": 0.11377,
+      "span_ms": 0.11377,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "230121928278209"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690483.314927,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 1.8380012512207031
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 4.698276519775391,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "40764cb25e65fab4",
+   "case_index": 4,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 3072
+   },
+   "problem_size": 12582912,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 12,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 12,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 12,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 12,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.15880766666666668,
+   "latency_ms_samples": [
+    0.158229,
+    0.157104,
+    0.16109
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.158229,
+     0.157104,
+     0.16109
+    ],
+    "mean_ms": 0.15880766666666668,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case004_e2af6e9a_t0",
+     "case004_e2af6e9a_t1",
+     "case004_e2af6e9a_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.158229,
+      "union_ms": 0.158229,
+      "span_ms": 0.158229,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "319655017283096"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.157104,
+      "union_ms": 0.157104,
+      "span_ms": 0.157104,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "319655017283096"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.16109,
+      "union_ms": 0.16109,
+      "span_ms": 0.16109,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "319655017283096"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690488.1143184,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.0111546516418457
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.124644994735718,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "279f81f45fa01b48",
+   "case_index": 6,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 4096
+   },
+   "problem_size": 16777216,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 16,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 16,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 16,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 16,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.195227,
+   "latency_ms_samples": [
+    0.198746,
+    0.193916,
+    0.193019
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.198746,
+     0.193916,
+     0.193019
+    ],
+    "mean_ms": 0.195227,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case006_2f024a6d_t0",
+     "case006_2f024a6d_t1",
+     "case006_2f024a6d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.198746,
+      "union_ms": 0.198746,
+      "span_ms": 0.198746,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "117231485514667"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.193916,
+      "union_ms": 0.193916,
+      "span_ms": 0.193916,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "117231485514667"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.193019,
+      "union_ms": 0.193019,
+      "span_ms": 0.193019,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "117231485514667"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690493.3391764,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.2234926223754883
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.5166099071502686,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "062a952201907f8b",
+   "case_index": 8,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 5120
+   },
+   "problem_size": 20971520,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 20,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 20,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 20,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 20,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.22116233333333335,
+   "latency_ms_samples": [
+    0.222003,
+    0.222586,
+    0.218898
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.222003,
+     0.222586,
+     0.218898
+    ],
+    "mean_ms": 0.22116233333333335,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case008_9f95724e_t0",
+     "case008_9f95724e_t1",
+     "case008_9f95724e_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.222003,
+      "union_ms": 0.222003,
+      "span_ms": 0.222003,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1035499818554226"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.222586,
+      "union_ms": 0.222586,
+      "span_ms": 0.222586,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1035499818554226"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.218898,
+      "union_ms": 0.218898,
+      "span_ms": 0.218898,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1035499818554226"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690498.9548423,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.4360291957855225
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 5.902261972427368,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "8080265e89e89b39",
+   "case_index": 10,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 6144
+   },
+   "problem_size": 25165824,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 24,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 24,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 24,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 24,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.2556636666666667,
+   "latency_ms_samples": [
+    0.258271,
+    0.254059,
+    0.254661
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.258271,
+     0.254059,
+     0.254661
+    ],
+    "mean_ms": 0.2556636666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case010_02e9f941_t0",
+     "case010_02e9f941_t1",
+     "case010_02e9f941_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.258271,
+      "union_ms": 0.258271,
+      "span_ms": 0.258271,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "349367075149346"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.254059,
+      "union_ms": 0.254059,
+      "span_ms": 0.254059,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "349367075149346"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.254661,
+      "union_ms": 0.254661,
+      "span_ms": 0.254661,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "349367075149346"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690504.9563234,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.689836025238037
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.358770132064819,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "2f20d955d479d3e0",
+   "case_index": 12,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 7168
+   },
+   "problem_size": 29360128,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 28,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 28,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 28,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 28,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.29048466666666667,
+   "latency_ms_samples": [
+    0.289932,
+    0.293725,
+    0.287797
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.289932,
+     0.293725,
+     0.287797
+    ],
+    "mean_ms": 0.29048466666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case012_a57be7b6_t0",
+     "case012_a57be7b6_t1",
+     "case012_a57be7b6_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.289932,
+      "union_ms": 0.289932,
+      "span_ms": 0.289932,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "145033265729756"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.293725,
+      "union_ms": 0.293725,
+      "span_ms": 0.293725,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "145033265729756"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.287797,
+      "union_ms": 0.287797,
+      "span_ms": 0.287797,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "145033265729756"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690511.4181743,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 2.9290125370025635
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.738365888595581,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d243b7d2e21e66ee",
+   "case_index": 14,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 8192
+   },
+   "problem_size": 33554432,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 32,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 32,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 32,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 32,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.3159446666666667,
+   "latency_ms_samples": [
+    0.315643,
+    0.318206,
+    0.313985
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.315643,
+     0.318206,
+     0.313985
+    ],
+    "mean_ms": 0.3159446666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case014_c1247b46_t0",
+     "case014_c1247b46_t1",
+     "case014_c1247b46_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.315643,
+      "union_ms": 0.315643,
+      "span_ms": 0.315643,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "480531050051058"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.318206,
+      "union_ms": 0.318206,
+      "span_ms": 0.318206,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "480531050051058"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.313985,
+      "union_ms": 0.313985,
+      "span_ms": 0.313985,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "480531050051058"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690518.2558656,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.0989651679992676
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 6.999549388885498,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "a1fa68ae2b2391f7",
+   "case_index": 16,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 9216
+   },
+   "problem_size": 37748736,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 36,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 36,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 36,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 36,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.3498403333333333,
+   "latency_ms_samples": [
+    0.345621,
+    0.355394,
+    0.348506
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.345621,
+     0.355394,
+     0.348506
+    ],
+    "mean_ms": 0.3498403333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case016_ec61c166_t0",
+     "case016_ec61c166_t1",
+     "case016_ec61c166_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.345621,
+      "union_ms": 0.345621,
+      "span_ms": 0.345621,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "219018048908303"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.355394,
+      "union_ms": 0.355394,
+      "span_ms": 0.355394,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "219018048908303"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.348506,
+      "union_ms": 0.348506,
+      "span_ms": 0.348506,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "219018048908303"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690525.3566682,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.3469178676605225
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 7.413458347320557,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "1825b3fb053cd248",
+   "case_index": 18,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 10240
+   },
+   "problem_size": 41943040,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 40,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 40,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 40,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 40,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.381755,
+   "latency_ms_samples": [
+    0.384082,
+    0.382699,
+    0.378484
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.384082,
+     0.382699,
+     0.378484
+    ],
+    "mean_ms": 0.381755,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case018_b5766c15_t0",
+     "case018_b5766c15_t1",
+     "case018_b5766c15_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.384082,
+      "union_ms": 0.384082,
+      "span_ms": 0.384082,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "856168445942491"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.382699,
+      "union_ms": 0.382699,
+      "span_ms": 0.382699,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "856168445942491"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.378484,
+      "union_ms": 0.378484,
+      "span_ms": 0.378484,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "856168445942491"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690532.869029,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.5583932399749756
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 7.912525415420532,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "c8eb4250f98a5a54",
+   "case_index": 20,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 11264
+   },
+   "problem_size": 46137344,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 44,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 44,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 44,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 44,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.4163523333333334,
+   "latency_ms_samples": [
+    0.418607,
+    0.414491,
+    0.415959
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.418607,
+     0.414491,
+     0.415959
+    ],
+    "mean_ms": 0.4163523333333334,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case020_9b3baae9_t0",
+     "case020_9b3baae9_t1",
+     "case020_9b3baae9_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.418607,
+      "union_ms": 0.418607,
+      "span_ms": 0.418607,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "74127491110520"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.414491,
+      "union_ms": 0.414491,
+      "span_ms": 0.414491,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "74127491110520"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.415959,
+      "union_ms": 0.415959,
+      "span_ms": 0.415959,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "74127491110520"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690540.8818514,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 3.7865054607391357
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.204921245574951,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d359056d4169699a",
+   "case_index": 22,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 12288
+   },
+   "problem_size": 50331648,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 48,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 48,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 48,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 48,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.4418043333333333,
+   "latency_ms_samples": [
+    0.442976,
+    0.442921,
+    0.439516
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.442976,
+     0.442921,
+     0.439516
+    ],
+    "mean_ms": 0.4418043333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case022_b23c9b1c_t0",
+     "case022_b23c9b1c_t1",
+     "case022_b23c9b1c_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.442976,
+      "union_ms": 0.442976,
+      "span_ms": 0.442976,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "804877091269774"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.442921,
+      "union_ms": 0.442921,
+      "span_ms": 0.442921,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "804877091269774"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.439516,
+      "union_ms": 0.439516,
+      "span_ms": 0.439516,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "804877091269774"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690549.1862185,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.018944978713989
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.602682113647461,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "983ddf4e49716b4a",
+   "case_index": 24,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 13312
+   },
+   "problem_size": 54525952,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 52,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 52,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 52,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 52,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.4794876666666667,
+   "latency_ms_samples": [
+    0.479241,
+    0.482893,
+    0.476329
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.479241,
+     0.482893,
+     0.476329
+    ],
+    "mean_ms": 0.4794876666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case024_27994126_t0",
+     "case024_27994126_t1",
+     "case024_27994126_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.479241,
+      "union_ms": 0.479241,
+      "span_ms": 0.479241,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "142627498745986"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.482893,
+      "union_ms": 0.482893,
+      "span_ms": 0.482893,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "142627498745986"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.476329,
+      "union_ms": 0.476329,
+      "span_ms": 0.476329,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "142627498745986"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690557.889315,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.266498804092407
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 8.999369144439697,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "1d5cd2d430823789",
+   "case_index": 26,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 14336
+   },
+   "problem_size": 58720256,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 56,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 56,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 56,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 56,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.5065773333333333,
+   "latency_ms_samples": [
+    0.507333,
+    0.506107,
+    0.506292
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.507333,
+     0.506107,
+     0.506292
+    ],
+    "mean_ms": 0.5065773333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case026_00556f52_t0",
+     "case026_00556f52_t1",
+     "case026_00556f52_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.507333,
+      "union_ms": 0.507333,
+      "span_ms": 0.507333,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "928204061825677"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.506107,
+      "union_ms": 0.506107,
+      "span_ms": 0.506107,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "928204061825677"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.506292,
+      "union_ms": 0.506292,
+      "span_ms": 0.506292,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "928204061825677"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690566.9902875,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.4985129833221436
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 9.272243022918701,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "381dc13ca6a22bb0",
+   "case_index": 28,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 15360
+   },
+   "problem_size": 62914560,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 60,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 60,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 60,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 60,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.5393763333333333,
+   "latency_ms_samples": [
+    0.541225,
+    0.53696,
+    0.539944
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.541225,
+     0.53696,
+     0.539944
+    ],
+    "mean_ms": 0.5393763333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case028_0016c177_t0",
+     "case028_0016c177_t1",
+     "case028_0016c177_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.541225,
+      "union_ms": 0.541225,
+      "span_ms": 0.541225,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "399063108900061"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.53696,
+      "union_ms": 0.53696,
+      "span_ms": 0.53696,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "399063108900061"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.539944,
+      "union_ms": 0.539944,
+      "span_ms": 0.539944,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "399063108900061"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690576.3619342,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.733313322067261
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 9.782942533493042,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "08d9307ec80eb2a0",
+   "case_index": 30,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 16384
+   },
+   "problem_size": 67108864,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 64,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 64,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 64,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 64,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.5736913333333333,
+   "latency_ms_samples": [
+    0.575429,
+    0.575554,
+    0.570091
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.575429,
+     0.575554,
+     0.570091
+    ],
+    "mean_ms": 0.5736913333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case030_ef142c9d_t0",
+     "case030_ef142c9d_t1",
+     "case030_ef142c9d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.575429,
+      "union_ms": 0.575429,
+      "span_ms": 0.575429,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "576922153542072"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.575554,
+      "union_ms": 0.575554,
+      "span_ms": 0.575554,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "576922153542072"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.570091,
+      "union_ms": 0.570091,
+      "span_ms": 0.570091,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "576922153542072"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690586.2449133,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 4.951845169067383
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 10.09274935722351,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "00b3d5e08d40957f",
+   "case_index": 32,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 17408
+   },
+   "problem_size": 71303168,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 68,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 68,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 68,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 68,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.6023826666666666,
+   "latency_ms_samples": [
+    0.600714,
+    0.605098,
+    0.601336
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.600714,
+     0.605098,
+     0.601336
+    ],
+    "mean_ms": 0.6023826666666666,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case032_ffef56f5_t0",
+     "case032_ffef56f5_t1",
+     "case032_ffef56f5_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.600714,
+      "union_ms": 0.600714,
+      "span_ms": 0.600714,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "22407014119836"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.605098,
+      "union_ms": 0.605098,
+      "span_ms": 0.605098,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "22407014119836"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.601336,
+      "union_ms": 0.601336,
+      "span_ms": 0.601336,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "22407014119836"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690596.4368699,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.19956636428833
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 10.373682975769043,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "2dd42cb9b0ced294",
+   "case_index": 34,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 18432
+   },
+   "problem_size": 75497472,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 72,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 72,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 72,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 72,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.6317853333333333,
+   "latency_ms_samples": [
+    0.631063,
+    0.632984,
+    0.631309
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.631063,
+     0.632984,
+     0.631309
+    ],
+    "mean_ms": 0.6317853333333333,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case034_e5567886_t0",
+     "case034_e5567886_t1",
+     "case034_e5567886_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.631063,
+      "union_ms": 0.631063,
+      "span_ms": 0.631063,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1046373394699790"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.632984,
+      "union_ms": 0.632984,
+      "span_ms": 0.632984,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1046373394699790"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.631309,
+      "union_ms": 0.631309,
+      "span_ms": 0.631309,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "1046373394699790"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690606.9120915,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.48759388923645
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 10.929946184158325,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::alloc::lazy",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "d4b0b9656f9784da",
+   "case_index": 36,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 19456
+   },
+   "problem_size": 79691776,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 76,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 76,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 76,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 76,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.6671516666666667,
+   "latency_ms_samples": [
+    0.669363,
+    0.665114,
+    0.666978
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.669363,
+     0.665114,
+     0.666978
+    ],
+    "mean_ms": 0.6671516666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case036_77732839_t0",
+     "case036_77732839_t1",
+     "case036_77732839_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.669363,
+      "union_ms": 0.669363,
+      "span_ms": 0.669363,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "601729420674212"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.665114,
+      "union_ms": 0.665114,
+      "span_ms": 0.665114,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "601729420674212"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.666978,
+      "union_ms": 0.666978,
+      "span_ms": 0.666978,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "601729420674212"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690617.9435878,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.699270486831665
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 11.306708574295044,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  },
+  {
+   "case_id": "c83f92ac26d4a939",
+   "case_index": 38,
+   "params": {
+    "batch_size": 1,
+    "n_heads": 32,
+    "head_dim": 128,
+    "seq_len": 20480
+   },
+   "problem_size": 83886080,
+   "status": "valid",
+   "diagnostic": null,
+   "config": {
+    "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+    "dma_slabs_per_tile": 8,
+    "heads_per_psum_group": 16,
+    "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+    "matmul_n": 512,
+    "output_ring": 3,
+    "partitions_per_tile": 128,
+    "prefetch_tiles": 2,
+    "product_ring": 3,
+    "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+    "psum_ring": 3,
+    "psum_width": 1024,
+    "q_ring": 3,
+    "rows_per_partition_per_core": 80,
+    "rows_per_partition_per_tile": 2,
+    "table_first_chunk_rows": 4,
+    "tables": "resident in SBUF (first chunk + rest)"
+   },
+   "config_reads": [
+    {
+     "after": "first_execution",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 80,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "numerical_checks",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 80,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    },
+    {
+     "after": "timing",
+     "config": {
+      "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+      "dma_slabs_per_tile": 8,
+      "heads_per_psum_group": 16,
+      "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+      "matmul_n": 512,
+      "output_ring": 3,
+      "partitions_per_tile": 128,
+      "prefetch_tiles": 2,
+      "product_ring": 3,
+      "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+      "psum_ring": 3,
+      "psum_width": 1024,
+      "q_ring": 3,
+      "rows_per_partition_per_core": 80,
+      "rows_per_partition_per_tile": 2,
+      "table_first_chunk_rows": 4,
+      "tables": "resident in SBUF (first chunk + rest)"
+     },
+     "error": null
+    }
+   ],
+   "latency_ms_mean": 0.6993476666666667,
+   "latency_ms_samples": [
+    0.705902,
+    0.699901,
+    0.69224
+   ],
+   "timing": {
+    "warmup_runs": 1,
+    "timed_runs": 3,
+    "samples_ms": [
+     0.705902,
+     0.699901,
+     0.69224
+    ],
+    "mean_ms": 0.6993476666666667,
+    "requested_use_cuda_graph": true,
+    "effective_use_cuda_graph": false,
+    "capture_succeeded": null,
+    "capture_error": null,
+    "graph_prep_runs": 0,
+    "timing_execution_mode": "eager",
+    "flush_before_each_launch": false,
+    "flush_requested": true,
+    "flush_buffer_mb": null,
+    "scope_names": [
+     "case038_f26b668d_t0",
+     "case038_f26b668d_t1",
+     "case038_f26b668d_t2"
+    ],
+    "note": null,
+    "profile_path": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn/neuron_profiles",
+    "measured_quantity": "neuron_device_busy_sum_per_call_from_runtime_trace",
+    "timing_definition": "busy_sum: sum over the device executions of one run() call of each execution's duration; per-physical-core copies of one execution merged by (model_id, flow_id) first",
+    "calls": [
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.705902,
+      "union_ms": 0.705902,
+      "span_ms": 0.705902,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "202505384486434"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.699901,
+      "union_ms": 0.699901,
+      "span_ms": 0.699901,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "202505384486434"
+      ]
+     },
+     {
+      "n_executions": 1,
+      "busy_sum_ms": 0.69224,
+      "union_ms": 0.69224,
+      "span_ms": 0.69224,
+      "overlap_between_executions": false,
+      "model_ids": [
+       "202505384486434"
+      ]
+     }
+    ],
+    "executables_identical": true,
+    "lnc": "2"
+   },
+   "timing_mode_differs": false,
+   "stages": {
+    "first_execution": {
+     "started": 1791690629.351798,
+     "ok": true,
+     "executions": 1,
+     "elapsed_s": 5.937001466751099
+    },
+    "numerical_checks": {
+     "executions_candidate": 3,
+     "executions_reference": 3,
+     "checks": [
+      {
+       "name": "fresh_storage",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "same_address_new_values",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      },
+      {
+       "name": "repeat_same_inputs",
+       "ok": true,
+       "message": "",
+       "inputs_mutated": [],
+       "output_aliases_inputs": []
+      }
+     ]
+    },
+    "timing": {
+     "warmup": 1,
+     "graph_prep": 0,
+     "timed": 3
+    }
+   },
+   "elapsed_s": 11.698724269866943,
+   "host_fallback_probe": [
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    },
+    {
+     "fallback_ops": [],
+     "neuron_to_cpu": [],
+     "executed_ops": [
+      "aten::empty",
+      "aten::empty_strided",
+      "neuron::nki_call"
+     ]
+    }
+   ]
+  }
+ ],
+ "cases_total": 20,
+ "cases_evaluated": 20,
+ "valid_cases": 20,
+ "latency_ms_geomean": 0.3394458728694958,
+ "first_failing_case": null,
+ "suite_stopped": null,
+ "device_backend": "neuron_native",
+ "neuron_environment": {
+  "neuronx_cc": "/home/ubuntu/workspace/native_venv/bin/neuronx-cc",
+  "env": {
+   "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+   "NEURON_LAUNCH_BLOCKING": "0",
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+   "NEURON_RT_ALLOW_LEGACY_NEFF": "1",
+   "NEURON_RT_DBG_ZEROCOPY": "1",
+   "NEURON_RT_MAP_HBM": "1",
+   "NEURON_RT_NUM_CORES": "1",
+   "TORCH_NEURONX_CPP_PROCESS_GROUP": "1",
+   "TORCH_NEURONX_DISABLE_FALLBACK_EXECUTION": "1",
+   "TORCH_NEURONX_ENABLE_HOST_CC": "0",
+   "TORCH_NEURONX_ENABLE_LAZY_ALLOC": "1",
+   "TORCH_NEURONX_ENABLE_STACK_TRACE": "0",
+   "TORCH_NEURONX_ENABLE_STREAMS": "0",
+   "TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS": "1",
+   "TORCH_NEURONX_MLIR_ATEN_OPS": "1",
+   "TORCH_NEURONX_PRESERVE_COMPILATION_ARTIFACTS": "0",
+   "TORCH_NEURONX_RETAIN_DEVICE_MODE": "0"
+  }
+ },
+ "precision_guard": {
+  "family": "fp32_precision",
+  "baseline": {
+   "backends.fp32_precision": "none",
+   "cuda.matmul.fp32_precision": "none",
+   "cudnn.fp32_precision": "none",
+   "cudnn.conv.fp32_precision": "tf32",
+   "cudnn.rnn.fp32_precision": "tf32",
+   "cuda.matmul.allow_fp16_reduced_precision_reduction": true,
+   "cuda.matmul.allow_bf16_reduced_precision_reduction": true,
+   "cudnn.benchmark": false,
+   "cudnn.deterministic": false,
+   "default_dtype": "torch.float32",
+   "deterministic_algorithms": false
+  },
+  "legacy_global_matmul_precision": "highest",
+  "verifications": 161,
+  "restores": [],
+  "restore_count": 0
+ },
+ "configs_distinct": [
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 4,
+   "rows_per_partition_per_tile": 1,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 8,
+   "rows_per_partition_per_tile": 1,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 12,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 16,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 20,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 24,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 28,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 32,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 36,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 40,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 44,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 48,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 52,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 56,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 60,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 64,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 68,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 72,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 76,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  },
+  {
+   "combine": "tensor engine +I/-I identity matmuls in fp32 psum, scalar engine evacuation",
+   "dma_slabs_per_tile": 8,
+   "heads_per_psum_group": 16,
+   "lnc_split": "contiguous half of sequence per program, contiguous rows per partition",
+   "matmul_n": 512,
+   "output_ring": 3,
+   "partitions_per_tile": 128,
+   "prefetch_tiles": 2,
+   "product_ring": 3,
+   "products": "vector engine only, input dtype: [q1*c|q2*s], [q2*c|q1*s]",
+   "psum_ring": 3,
+   "psum_width": 1024,
+   "q_ring": 3,
+   "rows_per_partition_per_core": 80,
+   "rows_per_partition_per_tile": 2,
+   "table_first_chunk_rows": 4,
+   "tables": "resident in SBUF (first chunk + rest)"
+  }
+ ],
+ "timing_mode_differs": false,
+ "elapsed_s": 171.62538027763367,
+ "resources": {
+  "cgroup_before": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "758849536",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_after": {
+   "cgroup": "/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service",
+   "events.low": 0,
+   "events.high": 0,
+   "events.max": 0,
+   "events.oom": 0,
+   "events.oom_kill": 0,
+   "events.oom_group_kill": 0,
+   "memory.max": "17179869184",
+   "memory.peak": "759197696",
+   "limited_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/tb-trn2-nki-base-full.service"
+  },
+  "cgroup_oom_kill_delta": 0,
+  "container_memory_limit": "100g",
+  "container_oom_suspected": false
+ },
+ "seed": 23281043,
+ "worker_rc": 0,
+ "worker_wall_s": 172.77600741386414,
+ "device_lock_wait_s": 9415.417757034302,
+ "isolation": {
+  "backend": "docker",
+  "home_hidden": true,
+  "network": "none",
+  "pid_namespace": true,
+  "filesystem": "allowlist: system dirs, runtime prefix, editable package roots and repository read-only with data masks; sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true,
+  "allowlist": {
+   "system_ro": [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/opt",
+    "/sys"
+   ],
+   "runtime_prefix": "/home/ubuntu/workspace/native_venv",
+   "editable_roots": [
+    "/home/ubuntu/workspace/torch_neuron_eager"
+   ],
+   "repo_masks": [
+    "tilebench/benchmarks",
+    "results",
+    "artifacts",
+    "outputs",
+    "skills",
+    "docs",
+    "tests",
+    "tilebench/problems",
+    "tilebench/llm/v2/contracts/data",
+    ".git",
+    ".claude",
+    "archive"
+   ]
+  },
+  "device_nodes": {
+   "nvidia": {
+    "globs": [
+     "/dev/nvidia*"
+    ],
+    "present": [],
+    "verified": "pending"
+   },
+   "amd": {
+    "globs": [
+     "/dev/kfd",
+     "/dev/dri"
+    ],
+    "present": [
+     "/dev/dri"
+    ],
+    "verified": "pending"
+   },
+   "neuron": {
+    "globs": [
+     "/dev/neuron*"
+    ],
+    "present": [
+     "/dev/neuron0"
+    ],
+    "verified": "pending"
+   }
+  },
+  "bwrap_error": null,
+  "capabilities": "all dropped; no-new-privileges; read-only root",
+  "image": "tilebench-sandbox-empty:1",
+  "image_id": "sha256:8c49df10b4599d6a6eb21307589a42b53e603b3533d6e0e58945649bd4e06bab",
+  "memory_limit": "100g",
+  "timing_adapter": "neuron_native_trace"
+ },
+ "sandbox_dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/_sandbox/rope_5_1_you_sgcn",
+ "archive": {
+  "dir": "/home/ubuntu/tb_wt/_llm_trn2/outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/base/Trn2/nki/claude/rope/fp16/cs82374c327612ea/round_05/attempt_1/eval_0001/evaluation",
+  "files": [
+   "cases.jsonl",
+   "impl_nki.py",
+   "job.json",
+   "progress.json",
+   "result.json",
+   "worker_stderr.txt",
+   "worker_stdout.txt"
+  ]
+ },
+ "evaluation_revision": "eval_0001"
+}
