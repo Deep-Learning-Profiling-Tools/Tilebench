@@ -265,3 +265,10 @@ representative operators to `aggregate` as eligible. On Trn2 the exact E̅(B) th
 is scaled by 36/45. The minimum fix is a device-aware eligible / unsupported denominator taken from
 `support.task_table`. It is a no-op on B200, GH200 and MI300X, where all 45 are eligible. Do not quote Trn2 `metrics`
 output until that fix lands. `campaign_report`, `cost_report` and `coverage` do not use that aggregation.
+
+Git provenance: the campaign records name launch commit `a713419b`. Before the branch was first pushed, the four
+unpushed commits from `01398d75` on were rewritten. The only change was redacting an EC2 instance id from
+`skills/reference/nki/0.7.0b1/evidence/smoke_results.json` and updating that file's hash in the skill's
+`manifest.json`. The launch commit is published as `1c3cc97e`, with every other path byte-identical. The full map is in
+`artifacts/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/GIT_REWRITE_2026-10-11.json`. SKILL.md (the injected text) and
+every pinned freeze, scoring and trajectory hash are unchanged.
